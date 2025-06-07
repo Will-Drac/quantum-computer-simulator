@@ -365,6 +365,52 @@ class Matrix {
 
         return new Vector(this.rows, resultTexture)
     }
+
+    async kronecker(otherMatrix) {
+        const kModule = device.createShaderModule({
+            label: "kronecker product module",
+            code: await loadWGSL("./shaders/kronecker.wgsl")
+        })
+
+        const kPipeline = device.createComputePipeline({
+            label: "kronecker product pipeline",
+            layout: "auto",
+            compute: {
+                module: kModule
+            }
+        })
+
+        const resultMatrixRows = this.rows * otherMatrix.rows
+        const resultMatrixColumns = this.columns * otherMatrix.columns
+
+        const resultTexture = device.createTexture({
+            dimension: "2d",
+            size: [resultMatrixRows, resultMatrixColumns],
+            format: "r32float",
+            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
+        })
+
+        const kBindGroup = device.createBindGroup({
+            label: "kronecker product bind group",
+            layout: kPipeline.getBindGroupLayout(0),
+            entries: [
+                {binding: 0, resource: this.texture.createView()},
+                {binding: 1, resource: otherMatrix.texture.createView()},
+                {binding: 2, resource: resultTexture.createView()}
+            ]
+        })
+
+        const kEncoder = device.createCommandEncoder()
+        const kPass = kEncoder.beginComputePass()
+        kPass.setPipeline(kPipeline)
+        kPass.setBindGroup(0, kBindGroup)
+        kPass.dispatchWorkgroups(resultMatrixRows, resultMatrixColumns, 1)
+        kPass.end()
+
+        device.queue.submit([kEncoder.finish()])
+
+        return new Matrix(resultMatrixRows, resultMatrixColumns, resultTexture)
+    }
 }
 
 // a matrix with a real and imaginary component, represented as two different matrices
@@ -394,6 +440,26 @@ class ComplexMatrix {
             this.rows,
             realVector.texture,
             imaginaryVector.texture
+        )
+    }
+
+    async kronecker(otherComplexMatrix) {
+        const realMatrix = await(
+            await this.real.kronecker(otherComplexMatrix.real)
+        ).subtract(
+            await this.imaginary.kronecker(otherComplexMatrix.imaginary)
+        )
+
+        const imaginaryMatrix = await(
+            await this.imaginary.kronecker(otherComplexMatrix.real)
+        ).add(
+            await this.real.kronecker(otherComplexMatrix.imaginary)
+        )
+
+        return new ComplexMatrix(
+            this.rows*otherComplexMatrix.rows, this.columns*otherComplexMatrix.columns,
+            realMatrix.texture,
+            imaginaryMatrix.texture
         )
     }
 }
