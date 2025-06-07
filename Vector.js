@@ -1,17 +1,16 @@
 class Vector {
-    constructor(dimension) {
+    constructor(dimension, texture) {
         this.dimension = dimension
-        this.entries = new Array(dimension).fill(0)
-    }
-
-    getTexture() {
-        const texture = device.createTexture({
+        this.texture = texture ? texture : device.createTexture({
             dimension: "2d",
             size: [this.dimension, 1, 1],
             format: "r32float",
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
         })
+    }
 
+    // updates the texture based on the entries
+    getTexture() {
         const unpaddedBytesPerTexHorizontal = this.dimension * 4
         const paddedBytesPerTexHorizontal = Math.ceil(unpaddedBytesPerTexHorizontal / 256) * 256
         const paddedFloatsPerTexHorizontal = paddedBytesPerTexHorizontal / 4
@@ -39,7 +38,7 @@ class Vector {
                 bytesPerRow: paddedBytesPerTexHorizontal
             },
             {
-                texture: texture
+                texture: this.texture
             },
             [this.dimension, 1, 1]
         )
@@ -47,20 +46,11 @@ class Vector {
         const commandBuffer = commandEncoder.finish()
         device.queue.submit([commandBuffer])
 
-        this.vectorTexture = new VectorTexture(this.dimension, texture)
-        return this.vectorTexture
-    }
-}
-
-class VectorTexture {
-    constructor(dimension, texture) {
-        this.dimension = dimension
-        this.tex = texture
+        return this.texture
     }
 
-    // turns it into a Vector object, where the entries can be seen and edited
-    async getVector() {
-        let V = new Vector(this.dimension)
+    async getEntries() {
+        if (!this.entries) {this.entries = new Array(this.dimension).fill(0)}
 
         const unpaddedBytesPerTexHorizontal = this.dimension * 4
         const paddedBytesPerTexHorizontal = Math.ceil(unpaddedBytesPerTexHorizontal / 256) * 256
@@ -73,7 +63,7 @@ class VectorTexture {
 
         const readEncoder = device.createCommandEncoder()
         readEncoder.copyTextureToBuffer(
-            {texture: this.tex},
+            {texture: this.texture},
             {
                 buffer: readBuffer,
                 bytesPerRow: paddedBytesPerTexHorizontal,
@@ -89,11 +79,9 @@ class VectorTexture {
         const data = new Float32Array(mappedRange);
 
         for (let i = 0; i < this.dimension; i++) {
-            V.entries[i] = data[i]
+            this.entries[i] = data[i]
         }
 
-        V.vectorTexture = this // so that work doesnt need to be done to get back to the MatrixTexture "this"
-
-        return V
+        return this.entries
     }
 }

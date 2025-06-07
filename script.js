@@ -60,8 +60,8 @@ async function main() {
     A.getTexture()
     v.getTexture()
 
-    const result = await A.matrixTexture.multiplyVector(v.vectorTexture)
-    console.log(await result.getVector())
+    const result = await A.multiplyVector(v)
+    console.log(await result.getEntries())
 }
 
 main()

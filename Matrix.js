@@ -6,20 +6,19 @@ async function loadWGSL(url) {
 }
 
 class Matrix {
-    constructor(rows, columns) {
+    constructor(rows, columns, texture) {
         this.rows = rows
         this.columns = columns
-        this.entries = Array.from({ length: rows }, () => Array(columns).fill(0)) //creates the entries, filled with 0
-    }
-
-    getTexture() {
-        const texture = device.createTexture({
+        this.texture = texture ? texture : device.createTexture({
             dimension: "2d",
             size: [this.rows, this.columns, 1],
             format: "r32float",
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
         })
+    }
 
+    // updates the texture based on the entries
+    getTexture() {
         const unpaddedBytesPerTexHorizontal = this.rows * 4
         const paddedBytesPerTexHorizontal = Math.ceil(unpaddedBytesPerTexHorizontal / 256) * 256
         const paddedFloatsPerTexHorizontal = paddedBytesPerTexHorizontal / 4
@@ -49,7 +48,7 @@ class Matrix {
                 bytesPerRow: paddedBytesPerTexHorizontal
             },
             {
-                texture: texture
+                texture: this.texture
             },
             [this.rows, this.columns, 1]
         )
@@ -57,21 +56,11 @@ class Matrix {
         const commandBuffer = commandEncoder.finish()
         device.queue.submit([commandBuffer])
 
-        this.matrixTexture = new MatrixTexture(this.rows, this.columns, texture)
-        return this.matrixTexture
-    }
-}
-
-class MatrixTexture {
-    constructor(rows, columns, texture) {
-        this.rows = rows
-        this.columns = columns
-        this.tex = texture
+        return this.texture
     }
 
-    // turns it into a Matrix object, where the entries can be seen and edited
-    async getMatrix() {
-        let M = new Matrix(this.rows, this.columns)
+    async getEntries() {
+        if (!this.entries) { this.entries = Array.from({ length: this.rows }, () => Array(this.columns)) }
 
         const unpaddedBytesPerTexHorizontal = this.rows * 4
         const paddedBytesPerTexHorizontal = Math.ceil(unpaddedBytesPerTexHorizontal / 256) * 256
@@ -85,7 +74,7 @@ class MatrixTexture {
 
         const readEncoder = device.createCommandEncoder()
         readEncoder.copyTextureToBuffer(
-            { texture: this.tex },
+            { texture: this.texture },
             {
                 buffer: readBuffer,
                 bytesPerRow: paddedBytesPerTexHorizontal,
@@ -102,16 +91,14 @@ class MatrixTexture {
 
         for (let i = 0; i < this.rows; i++) {
             for (let j = 0; j < this.columns; j++) {
-                M.entries[i][j] = data[j * paddedFloatsPerTexHorizontal + i]
+                this.entries[i][j] = data[j * paddedFloatsPerTexHorizontal + i]
             }
         }
 
-        M.matrixTexture = this // so that work doesnt need to be done to get back to the MatrixTexture "this"
-
-        return M
+        return this.entries
     }
 
-    // returns a texture, assumes the other matrix is of the same size
+    // assumes the other matrix is of the same size
     async add(otherMatrix) {
         const addModule = device.createShaderModule({
             label: "matrix addition module",
@@ -137,8 +124,8 @@ class MatrixTexture {
             label: "matrix addition bind group",
             layout: addPipeline.getBindGroupLayout(0),
             entries: [
-                { binding: 0, resource: this.tex.createView() },
-                { binding: 1, resource: otherMatrix.tex.createView() },
+                { binding: 0, resource: this.texture.createView() },
+                { binding: 1, resource: otherMatrix.texture.createView() },
                 { binding: 2, resource: resultTexture.createView() }
             ]
         })
@@ -153,10 +140,9 @@ class MatrixTexture {
         const addCommandBuffer = addEncoder.finish()
         device.queue.submit([addCommandBuffer])
 
-        return new MatrixTexture(this.rows, this.columns, resultTexture)
+        return new Matrix(this.rows, this.columns, resultTexture)
     }
 
-    // returns a texture, "this" gets multiplied on the left of "otherMatrix"
     async multiply(otherMatrix) {
         if (this.columns !== otherMatrix.rows) { console.log(`MATRIX MULTIPLICATION FAILED, ${this.columns} != ${otherMatrix.rows}`); return null }
 
@@ -187,8 +173,8 @@ class MatrixTexture {
             label: "matrix multiplication bind group",
             layout: multiplyPipeline.getBindGroupLayout(0),
             entries: [
-                { binding: 0, resource: this.tex.createView() },
-                { binding: 1, resource: otherMatrix.tex.createView() },
+                { binding: 0, resource: this.texture.createView() },
+                { binding: 1, resource: otherMatrix.texture.createView() },
                 { binding: 2, resource: resultTexture.createView() }
             ]
         })
@@ -203,7 +189,7 @@ class MatrixTexture {
         const multiplyCommandBuffer = multiplyEncoder.finish()
         device.queue.submit([multiplyCommandBuffer])
 
-        return new MatrixTexture(this.rows, otherMatrix.columns, resultTexture)
+        return new Matrix(this.rows, otherMatrix.columns, resultTexture)
     }
 
     async multiplyVector(vector) {
@@ -233,8 +219,8 @@ class MatrixTexture {
             label: "matrix-vector multiplication bind group",
             layout: multiplyPipeline.getBindGroupLayout(0),
             entries: [
-                { binding: 0, resource: this.tex.createView() },
-                { binding: 1, resource: vector.tex.createView() },
+                { binding: 0, resource: this.texture.createView() },
+                { binding: 1, resource: vector.texture.createView() },
                 { binding: 2, resource: multiplyResultTexture.createView() }
             ]
         })
@@ -320,19 +306,19 @@ class MatrixTexture {
             dimension: "2d",
             size: [this.rows, 1, 1],
             format: "r32float",
-            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST| GPUTextureUsage.COPY_SRC
+            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
         })
 
         const resultCopyEncoder = device.createCommandEncoder()
         resultCopyEncoder.copyTextureToTexture(
-            {texture: workTexture},
-            {texture: resultTexture},
+            { texture: workTexture },
+            { texture: resultTexture },
             [this.rows, 1, 1]
         )
 
         device.queue.submit([resultCopyEncoder.finish()])
 
-        return new VectorTexture(this.rows, resultTexture)
+        return new Vector(this.rows, resultTexture)
     }
 }
 
