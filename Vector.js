@@ -84,4 +84,103 @@ class Vector {
 
         return this.entries
     }
+
+    // assumes the other vector is of the same size
+    async add(otherVector) {
+        const addModule = device.createShaderModule({
+            label: "matrix addition module",
+            code: await loadWGSL("./shaders/add.wgsl")
+        })
+
+        const addPipeline = device.createComputePipeline({
+            label: "matrix addition pipeline",
+            layout: "auto",
+            compute: {
+                module: addModule
+            }
+        })
+
+        const resultTexture = device.createTexture({
+            dimension: "2d",
+            size: [this.dimension, 1, 1],
+            format: "r32float",
+            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
+        })
+
+        const addBindGroup = device.createBindGroup({
+            label: "matrix addition bind group",
+            layout: addPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: this.texture.createView() },
+                { binding: 1, resource: otherVector.texture.createView() },
+                { binding: 2, resource: resultTexture.createView() }
+            ]
+        })
+
+        const addEncoder = device.createCommandEncoder()
+        const addPass = addEncoder.beginComputePass()
+        addPass.setPipeline(addPipeline)
+        addPass.setBindGroup(0, addBindGroup)
+        addPass.dispatchWorkgroups(this.dimension, 1, 1)
+        addPass.end()
+
+        const addCommandBuffer = addEncoder.finish()
+        device.queue.submit([addCommandBuffer])
+
+        return new Vector(this.dimension, resultTexture)
+    }
+
+    // assumes the other vector is of the same size
+    async subtract(otherVector) {
+        const subtractModule = device.createShaderModule({
+            label: "matrix addition module",
+            code: await loadWGSL("./shaders/subtract.wgsl")
+        })
+
+        const subtractPipeline = device.createComputePipeline({
+            label: "matrix addition pipeline",
+            layout: "auto",
+            compute: {
+                module: subtractModule
+            }
+        })
+
+        const resultTexture = device.createTexture({
+            dimension: "2d",
+            size: [this.dimension, 1, 1],
+            format: "r32float",
+            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
+        })
+
+        const subtractBindGroup = device.createBindGroup({
+            label: "matrix addition bind group",
+            layout: subtractPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: this.texture.createView() },
+                { binding: 1, resource: otherVector.texture.createView() },
+                { binding: 2, resource: resultTexture.createView() }
+            ]
+        })
+
+        const subtractEncoder = device.createCommandEncoder()
+        const subtractPass = subtractEncoder.beginComputePass()
+        subtractPass.setPipeline(subtractPipeline)
+        subtractPass.setBindGroup(0, subtractBindGroup)
+        subtractPass.dispatchWorkgroups(this.dimension, 1, 1)
+        subtractPass.end()
+
+        const subtractCommandBuffer = subtractEncoder.finish()
+        device.queue.submit([subtractCommandBuffer])
+
+        return new Vector(this.dimension, resultTexture)
+    }
+}
+
+class ComplexVector {
+    constructor(dimension, realTexture, imaginaryTexture) {
+        this.dimension = dimension
+
+        this.real = new Vector(dimension, realTexture)
+        this.imaginary = new Vector(dimension, imaginaryTexture)
+    }
 }

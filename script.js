@@ -41,27 +41,33 @@ async function main() {
     //     console.log(await sum.getMatrix())
     // }
 
-    let A = new Matrix(4, 3)
-    let v = new Vector(3)
-
-    A.entries = [
-        [2, 1, 3],
-        [3, 4, 1],
-        [1, 2, 2],
-        [5, 2, 1]
+    const A = new ComplexMatrix(3, 3)
+    A.real.entries = [
+        [1, 6, 0],
+        [1, 0, 0],
+        [1, 0, 1]
     ]
-
-    v.entries = [
-        1,
-        4,
-        7
+    A.imaginary.entries = [
+        [1, 1, 5],
+        [0, 1, 0],
+        [6, 0, 0]
     ]
+    A.real.getTexture()
+    A.imaginary.getTexture()
 
-    A.getTexture()
-    v.getTexture()
+    const v = new ComplexVector(3)
+    v.real.entries = [
+        1, 2, 0
+    ]
+    v.imaginary.entries = [
+        1, 0, 7
+    ]
+    v.real.getTexture()
+    v.imaginary.getTexture()
 
-    const result = await A.multiplyVector(v)
-    console.log(await result.getEntries())
+    const result = await A.multiplyComplexVector(v)
+
+    console.log(await result.real.getEntries(), await result.imaginary.getEntries())
 }
 
 main()

@@ -143,6 +143,51 @@ class Matrix {
         return new Matrix(this.rows, this.columns, resultTexture)
     }
 
+    // assumes the other matrix is of the same size
+    async subtract(otherMatrix) {
+        const subtractModule = device.createShaderModule({
+            label: "matrix addition module",
+            code: await loadWGSL("./shaders/subtract.wgsl")
+        })
+
+        const subtractPipeline = device.createComputePipeline({
+            label: "matrix addition pipeline",
+            layout: "auto",
+            compute: {
+                module: subtractModule
+            }
+        })
+
+        const resultTexture = device.createTexture({
+            dimension: "2d",
+            size: [this.rows, this.columns, 1],
+            format: "r32float",
+            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
+        })
+
+        const subtractBindGroup = device.createBindGroup({
+            label: "matrix addition bind group",
+            layout: subtractPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: this.texture.createView() },
+                { binding: 1, resource: otherMatrix.texture.createView() },
+                { binding: 2, resource: resultTexture.createView() }
+            ]
+        })
+
+        const subtractEncoder = device.createCommandEncoder()
+        const subtractPass = subtractEncoder.beginComputePass()
+        subtractPass.setPipeline(subtractPipeline)
+        subtractPass.setBindGroup(0, subtractBindGroup)
+        subtractPass.dispatchWorkgroups(this.rows, this.columns)
+        subtractPass.end()
+
+        const subtractCommandBuffer = subtractEncoder.finish()
+        device.queue.submit([subtractCommandBuffer])
+
+        return new Matrix(this.rows, this.columns, resultTexture)
+    }
+
     async multiply(otherMatrix) {
         if (this.columns !== otherMatrix.rows) { console.log(`MATRIX MULTIPLICATION FAILED, ${this.columns} != ${otherMatrix.rows}`); return null }
 
@@ -324,11 +369,31 @@ class Matrix {
 
 // a matrix with a real and imaginary component, represented as two different matrices
 class ComplexMatrix {
-    constructor(rows, columns) {
+    constructor(rows, columns, realTexture, imaginaryTexture) {
         this.rows = rows
         this.columns = columns
 
-        this.real = new Matrix(rows, columns)
-        this.imaginary = new Matrix(rows, columns)
+        this.real = new Matrix(rows, columns, realTexture)
+        this.imaginary = new Matrix(rows, columns, imaginaryTexture)
+    }
+
+    async multiplyComplexVector(complexVector) {
+        const realVector = await (
+            await this.real.multiplyVector(complexVector.real)
+        ).subtract(
+            await this.imaginary.multiplyVector(complexVector.imaginary)
+        )
+
+        const imaginaryVector = await (
+            await this.real.multiplyVector(complexVector.imaginary)
+        ).add(
+            await this.imaginary.multiplyVector(complexVector.real)
+        )
+
+        return new ComplexVector(
+            this.rows,
+            realVector.texture,
+            imaginaryVector.texture
+        )
     }
 }
