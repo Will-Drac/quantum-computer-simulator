@@ -26,7 +26,7 @@ class Matrix {
         const data = new Float32Array(this.columns * paddedFloatsPerTexHorizontal)
         for (let i = 0; i < this.columns; i++) {
             for (let j = 0; j < this.rows; j++) {
-                data[i * paddedFloatsPerTexHorizontal + j] = this.entries[j][i]
+                data[i * paddedFloatsPerTexHorizontal + j] = this.entries ? this.entries[j][i] : 0
             }
         }
 
@@ -184,6 +184,48 @@ class Matrix {
 
         const subtractCommandBuffer = subtractEncoder.finish()
         device.queue.submit([subtractCommandBuffer])
+
+        return new Matrix(this.rows, this.columns, resultTexture)
+    }
+
+    async multiplyScalar(scalar) {
+        const mModule = device.createShaderModule({
+            label: "matrix multiply scalar module",
+            code: (await loadWGSL("./shaders/multiplyScalar.wgsl")).replace("_SCALAR", scalar)
+        })
+
+        const msPipeline = device.createComputePipeline({
+            label: "matrix multiply scalar pipeline",
+            layout: "auto",
+            compute: {
+                module: mModule
+            }
+        })
+
+        const resultTexture = device.createTexture({
+            dimension: "2d",
+            size: [this.rows, this.columns, 1],
+            format: "r32float",
+            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
+        })
+
+        const mBindGroup = device.createBindGroup({
+            label: "matrix multiply scalar bind group",
+            layout: msPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: this.texture.createView() },
+                { binding: 1, resource: resultTexture.createView() }
+            ]
+        })
+
+        const mEncoder = device.createCommandEncoder()
+        const mPass = mEncoder.beginComputePass()
+        mPass.setPipeline(msPipeline)
+        mPass.setBindGroup(0, mBindGroup)
+        mPass.dispatchWorkgroups(this.rows, this.columns, 1)
+        mPass.end()
+
+        device.queue.submit([mEncoder.finish()])
 
         return new Matrix(this.rows, this.columns, resultTexture)
     }
@@ -394,9 +436,9 @@ class Matrix {
             label: "kronecker product bind group",
             layout: kPipeline.getBindGroupLayout(0),
             entries: [
-                {binding: 0, resource: this.texture.createView()},
-                {binding: 1, resource: otherMatrix.texture.createView()},
-                {binding: 2, resource: resultTexture.createView()}
+                { binding: 0, resource: this.texture.createView() },
+                { binding: 1, resource: otherMatrix.texture.createView() },
+                { binding: 2, resource: resultTexture.createView() }
             ]
         })
 
@@ -413,53 +455,122 @@ class Matrix {
     }
 }
 
+// creates an identity matrix of a particular size
+class IMatrix extends Matrix {
+    constructor(size) {
+        super(size, size)
+
+        this.entries = Array.from({ length: this.rows }, () => Array(this.columns).fill(0))
+        for (let i = 0; i < size; i++) {
+            this.entries[i][i] = 1
+        }
+
+        this.getTexture()
+    }
+}
+
 // a matrix with a real and imaginary component, represented as two different matrices
 class ComplexMatrix {
-    constructor(rows, columns, realTexture, imaginaryTexture) {
+    constructor(rows, columns, realTexture, imaginaryTexture, hasReal, hasImaginary) {
         this.rows = rows
         this.columns = columns
 
         this.real = new Matrix(rows, columns, realTexture)
         this.imaginary = new Matrix(rows, columns, imaginaryTexture)
+
+        this.hasReal = hasReal !== undefined ? hasReal : true
+        this.hasImaginary = hasImaginary !== undefined ? hasImaginary : true
     }
 
     async multiplyComplexVector(complexVector) {
-        const realVector = await (
-            await this.real.multiplyVector(complexVector.real)
-        ).subtract(
-            await this.imaginary.multiplyVector(complexVector.imaginary)
-        )
+        let realVector, imaginaryVector, hasReal, hasImaginary
 
-        const imaginaryVector = await (
-            await this.real.multiplyVector(complexVector.imaginary)
-        ).add(
-            await this.imaginary.multiplyVector(complexVector.real)
-        )
+        // optimized to only do multiplication if it's non-zero
+        if ((this.hasReal && complexVector.hasReal) || (this.hasImaginary && complexVector.hasImaginary)) {
+            if ((this.hasReal && complexVector.hasReal) && (this.hasImaginary && complexVector.hasImaginary)) {
+                realVector = await (
+                    await this.real.multiplyVector(complexVector.real)
+                ).subtract(
+                    await this.imaginary.multiplyVector(complexVector.imaginary)
+                )
+            }
+            else if (this.hasReal && complexVector.hasReal) {
+                realVector = await this.real.multiplyVector(complexVector.real)
+            }
+            else if (this.hasImaginary && complexVector.hasImaginary) {
+                realVector = await (await this.imaginary.multiplyVector(complexVector.imaginary)).multiplyScalar(-1)
+            }
+
+            hasReal = true
+        }
+        else {
+            hasReal = false
+        }
+
+        if ((this.hasReal && complexVector.hasImaginary) || (this.hasImaginary && complexVector.hasReal)) {
+            if ((this.hasReal && complexVector.hasImaginary) && (this.hasImaginary && complexVector.hasReal)) {
+                imaginaryVector = await (
+                    await this.real.multiplyVector(complexVector.imaginary)
+                ).add(
+                    await this.imaginary.multiplyVector(complexVector.real)
+                )
+            }
+            else if (this.hasReal && complexVector.hasImaginary) {
+                imaginaryVector = await this.real.multiplyVector(complexVector.imaginary)
+            }
+            else if (this.hasImaginary && complexVector.hasReal) {
+                imaginaryVector = await this.imaginary.multiplyVector(complexVector.real)
+            }
+
+            hasImaginary = true
+        }
+        else {
+            hasImaginary = false
+        }
 
         return new ComplexVector(
             this.rows,
             realVector.texture,
-            imaginaryVector.texture
+            imaginaryVector.texture,
+            hasReal,
+            hasImaginary
         )
     }
 
     async kronecker(otherComplexMatrix) {
-        const realMatrix = await(
+        const realMatrix = await (
             await this.real.kronecker(otherComplexMatrix.real)
         ).subtract(
             await this.imaginary.kronecker(otherComplexMatrix.imaginary)
         )
 
-        const imaginaryMatrix = await(
+        const imaginaryMatrix = await (
             await this.imaginary.kronecker(otherComplexMatrix.real)
         ).add(
             await this.real.kronecker(otherComplexMatrix.imaginary)
         )
 
         return new ComplexMatrix(
-            this.rows*otherComplexMatrix.rows, this.columns*otherComplexMatrix.columns,
+            this.rows * otherComplexMatrix.rows, this.columns * otherComplexMatrix.columns,
             realMatrix.texture,
-            imaginaryMatrix.texture
+            imaginaryMatrix.texture,
+            this.hasReal || otherComplexMatrix.hasReal, //the simple or is a rough approximation but maybe good enough
+            this.hasImaginary || otherComplexMatrix.hasImaginary
         )
+    }
+}
+
+// creates a complex identity matrix of a particular size
+// note: this.imaginary.entries is not immediately defined
+class IComplexMatrix extends ComplexMatrix {
+    constructor(size) {
+        super(size, size, undefined, undefined, true, false)
+
+        this.real.entries = Array.from({ length: this.rows }, () => Array(this.columns).fill(0))
+        for (let i = 0; i < size; i++) {
+            this.real.entries[i][i] = 1
+        }
+
+        this.real.getTexture()
     }
 }
