@@ -13,32 +13,26 @@ async function main() {
         return
     }
 
-    const A = new ComplexMatrix(2, 2)
-    A.real.entries = [
-        [0, 1],
-        [2, 1]
-    ]
-    A.real.getTexture()
-    A.imaginary.entries = [
-        [1, 1],
-        [1, 2]
-    ]
-    A.imaginary.getTexture()
+    let state = new ComplexVector(2**12)
+    await state.real.getEntries()
+    state.real.entries[0] = 1
+    state.real.getTexture()
 
-    const B = new ComplexMatrix(2, 2)
-    B.real.entries = [
-        [1, 2],
-        [1, 0]
-    ]
-    B.real.getTexture()
-    B.imaginary.entries = [
-        [0, 0],
-        [1, 0]
-    ]
-    B.imaginary.getTexture()
+    const H = new SingleGate("H")
+    await H.getStateMatrix(12, 1)
+    state = await H.stateMatrix.multiplyComplexVector(state)
 
-    const result = await A.kronecker(B)
-    console.log(await result.real.getEntries(), await result.imaginary.getEntries())
+    const P = new SingleGate("P", Math.PI/2)
+    await P.getStateMatrix(12, 1)
+    state = await P.stateMatrix.multiplyComplexVector(state)
+
+    const SX = new SingleGate("SX")
+    await SX.getStateMatrix(12, 1)
+    state = await SX.stateMatrix.multiplyComplexVector(state)
+
+    await state.calculateModSquare()
+
+    console.log(await state.getModSquare())
 }
 
 main()
