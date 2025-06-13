@@ -13,26 +13,30 @@ async function main() {
         return
     }
 
-    let state = new ComplexVector(2**12)
-    await state.real.getEntries()
-    state.real.entries[0] = 1
-    state.real.getTexture()
+    // let state = new State(12)
 
-    const H = new SingleGate("H")
-    await H.getStateMatrix(12, 1)
-    state = await H.stateMatrix.multiplyComplexVector(state)
+    // const H = new SingleGate("H")
+    // state = await H.apply(state, 1)
 
-    const P = new SingleGate("P", Math.PI/2)
-    await P.getStateMatrix(12, 1)
-    state = await P.stateMatrix.multiplyComplexVector(state)
+    // const P = new SingleGate("P", Math.PI/2)
+    // state = await P.apply(state, 1)
 
-    const SX = new SingleGate("SX")
-    await SX.getStateMatrix(12, 1)
-    state = await SX.stateMatrix.multiplyComplexVector(state)
+    // const SX = new SingleGate("SX")
+    // state = await SX.apply(state, 1)
 
-    await state.calculateModSquare()
+    // console.log(await state.getProbabilities())
 
-    console.log(await state.getModSquare())
+
+
+    let state = new State(2)
+
+    const X = new SingleGate("X")
+    const CNOT = new DoubleGate("CNOT")
+
+    state = await X.apply(state, 0)
+    state = await CNOT.apply(state, 1, 0)
+
+    console.log("after swap back", await state.getProbabilities())
 }
 
 main()

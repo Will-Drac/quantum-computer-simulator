@@ -96,7 +96,7 @@ const GateDefinitions = {
         hasImaginary: true
     },
 
-    SWAP: {
+    CNOT: {
         real: [
             [1, 0, 0, 0],
             [0, 1, 0, 0],

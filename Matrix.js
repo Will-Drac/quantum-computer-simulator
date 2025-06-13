@@ -483,7 +483,8 @@ class ComplexMatrix {
     }
 
     async multiplyComplexVector(complexVector) {
-        let realVector, imaginaryVector, hasReal, hasImaginary
+        let realVector = { texture: undefined }, imaginaryVector = { texture: undefined }
+        let hasReal, hasImaginary
 
         // optimized to only do multiplication if it's non-zero
         if ((this.hasReal && complexVector.hasReal) || (this.hasImaginary && complexVector.hasImaginary)) {
