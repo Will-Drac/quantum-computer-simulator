@@ -30,13 +30,25 @@ async function main() {
 
     let state = new State(2)
 
-    const X = new SingleGate("X")
-    const CNOT = new DoubleGate("CNOT")
+    const X = new Gate("X")
+    const H = new Gate("H")
+    const CCX = new Gate("CCX")
+    const CSWAP = new Gate("CSWAP")
+    const RY = new Gate("RY", [Math.PI / 2])
+    const RZ = new Gate("RZ", [Math.PI / 4])
+    const U = new Gate("U", [Math.PI / 6, Math.PI / 4, Math.PI / 3])
+    const CU = new Gate("CU", [4.23, 0.6, 5.3, Math.PI/2])
+    const CX = new Gate("CX")
 
-    state = await X.apply(state, 0)
-    state = await CNOT.apply(state, 1, 0)
+    // state = await RY.apply(state, [0])
+    // state = await RZ.apply(state, [0])
+    state = await X.apply(state, [0])
+    // state = await U.apply(state, [1])
+    state = await CU.apply(state, [0, 1])
+    // state = await U.apply(state, [1])
 
-    console.log("after swap back", await state.getProbabilities())
+    console.log(await state.vector.real.getEntries(), await state.vector.imaginary.getEntries())
+    console.log(await state.getProbabilities())
 }
 
 main()

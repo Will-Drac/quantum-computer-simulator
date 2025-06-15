@@ -21,6 +21,8 @@ class State {
 
     // swaps the position of two qbits in the state, essentially reorders the entries in this state's vectors
     async swap(qbit1, qbit2) {
+        if (qbit1 == qbit2) { return this } //do nothing
+
         const swapModule = device.createShaderModule({
             label: "swap qbits module",
             code: (await loadWGSL("./shaders/swap.wgsl")).replace("_Q1", qbit1).replace("_Q2", qbit2)
