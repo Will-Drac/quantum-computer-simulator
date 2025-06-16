@@ -50,7 +50,7 @@ class Vector {
     }
 
     async getEntries() {
-        if (!this.entries) {this.entries = new Array(this.dimension).fill(0)}
+        if (!this.entries) { this.entries = new Array(this.dimension).fill(0) }
 
         const unpaddedBytesPerTexHorizontal = this.dimension * 4
         const paddedBytesPerTexHorizontal = Math.ceil(unpaddedBytesPerTexHorizontal / 256) * 256
@@ -63,7 +63,7 @@ class Vector {
 
         const readEncoder = device.createCommandEncoder()
         readEncoder.copyTextureToBuffer(
-            {texture: this.texture},
+            { texture: this.texture },
             {
                 buffer: readBuffer,
                 bytesPerRow: paddedBytesPerTexHorizontal,
@@ -74,9 +74,9 @@ class Vector {
 
         device.queue.submit([readEncoder.finish()])
 
-        await readBuffer.mapAsync(GPUMapMode.READ);
-        const mappedRange = readBuffer.getMappedRange();
-        const data = new Float32Array(mappedRange);
+        await readBuffer.mapAsync(GPUMapMode.READ)
+        const mappedRange = readBuffer.getMappedRange()
+        const data = new Float32Array(mappedRange)
 
         for (let i = 0; i < this.dimension; i++) {
             this.entries[i] = data[i]
@@ -200,8 +200,8 @@ class Vector {
             label: "vector multiply scalar bind group",
             layout: msPipeline.getBindGroupLayout(0),
             entries: [
-                {binding: 0, resource: this.texture.createView()},
-                {binding: 1, resource: resultTexture.createView()}
+                { binding: 0, resource: this.texture.createView() },
+                { binding: 1, resource: resultTexture.createView() }
             ]
         })
 
@@ -229,7 +229,25 @@ class ComplexVector {
         this.hasImaginary = hasImaginary !== undefined ? hasImaginary : true
     }
 
-    async calculateModSquare(){
+    async multiplyScalar(scalar) {
+        let scaledReal, scaledImaginary
+        if (this.hasReal && scalar !== 0) {
+            scaledReal = await this.real.multiplyScalar(scalar)
+        }
+        if (this.hasImaginary && scalar !== 0) {
+            scaledImaginary = await this.imaginary.multiplyScalar(scalar)
+        }
+
+        return new ComplexVector(
+            this.dimension,
+            scaledReal ? scaledReal.texture : undefined,
+            scaledImaginary ? scaledImaginary.texture : undefined,
+            this.hasReal && scalar !== 0,
+            this.hasImaginary && scalar !== 0
+        )
+    }
+
+    async calculateModSquare() {
         const msModule = device.createShaderModule({
             label: "modulus square module",
             code: await loadWGSL("./shaders/modSquare.wgsl")
@@ -254,9 +272,9 @@ class ComplexVector {
             label: "modulus square bind group",
             layout: msPipeline.getBindGroupLayout(0),
             entries: [
-                {binding: 0, resource: this.real.texture.createView()},
-                {binding: 1, resource: this.imaginary.texture.createView()},
-                {binding: 2, resource: this.modSquareTexture.createView()}
+                { binding: 0, resource: this.real.texture.createView() },
+                { binding: 1, resource: this.imaginary.texture.createView() },
+                { binding: 2, resource: this.modSquareTexture.createView() }
             ]
         })
 
@@ -273,7 +291,7 @@ class ComplexVector {
     }
 
     async getModSquare() {
-        if (!this.modSquare) {this.modSquare = new Array(this.dimension).fill(0)}
+        if (!this.modSquare) { this.modSquare = new Array(this.dimension).fill(0) }
 
         const unpaddedBytesPerTexHorizontal = this.dimension * 4
         const paddedBytesPerTexHorizontal = Math.ceil(unpaddedBytesPerTexHorizontal / 256) * 256
@@ -286,7 +304,7 @@ class ComplexVector {
 
         const readEncoder = device.createCommandEncoder()
         readEncoder.copyTextureToBuffer(
-            {texture: this.modSquareTexture},
+            { texture: this.modSquareTexture },
             {
                 buffer: readBuffer,
                 bytesPerRow: paddedBytesPerTexHorizontal,
@@ -297,9 +315,9 @@ class ComplexVector {
 
         device.queue.submit([readEncoder.finish()])
 
-        await readBuffer.mapAsync(GPUMapMode.READ);
-        const mappedRange = readBuffer.getMappedRange();
-        const data = new Float32Array(mappedRange);
+        await readBuffer.mapAsync(GPUMapMode.READ)
+        const mappedRange = readBuffer.getMappedRange()
+        const data = new Float32Array(mappedRange)
 
         for (let i = 0; i < this.dimension; i++) {
             this.modSquare[i] = data[i]
