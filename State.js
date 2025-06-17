@@ -97,10 +97,27 @@ class State {
         return new State(this.numQbits, new ComplexVector(2 ** this.numQbits, newRealTexture, newImaginaryTexture, this.vector.hasReal, this.vector.hasImaginary))
     }
 
-    async set(qbit, qbitState) { //sometimes this produces a different global phase from ibm composer but maybe that's ok
+    async measure(qbit) {
+        const probabilities = await this.getProbabilities()
+
+        function bitEquals(x, bitIndex, value) {
+            return ((x >> bitIndex) & 1) === (value & 1)
+        }
+
+        let probabilityOf0 = 0 //probabilityOf1 is just 1-probabilityOf0
+        for (let i = 0; i < probabilities.length; i++) {
+            if (bitEquals(i, qbit, 0)) {
+                probabilityOf0 += probabilities[i]
+            }
+        }
+
+        const bitMeasured = Math.random() < probabilityOf0 ? 0 : 1
+
+        // now remove all impossible states from the state vector: states where the qbit measured doesnt have the value that we measured for it
+
         const setModule = device.createShaderModule({
             label: "set qbit module",
-            code: (await loadWGSL("./shaders/setQbit.wgsl")).replace("_QBIT", qbit).replace("_NEWSTATE", qbitState)
+            code: (await loadWGSL("./shaders/setQbit.wgsl")).replace("_QBIT", qbit).replace("_NEWSTATE", bitMeasured)
         })
 
         const setPipeline = device.createComputePipeline({
@@ -170,19 +187,25 @@ class State {
 
         const removedState = new State(this.numQbits, new ComplexVector(2 ** this.numQbits, newRealTexture, newImaginaryTexture, this.vector.hasReal, this.vector.hasImaginary))
 
-        // now all the impossible states have a state of 0, but we need to scale the remaining ones so that the probabilities add up to 1 again
+        // now the probability won't add up to 100%, we need to scale up the remaining probabilities
 
-        const probabilities = await removedState.getProbabilities() //!maybe its a bad idea to read all of these to the cpu for this
+        let probabilityLeft = bitMeasured == 0 ? probabilityOf0 : 1 - probabilityOf0
 
-        let probabilitiesSum = 0
-        for (let i = 0; i < probabilities.length; i++) {
-            probabilitiesSum += probabilities[i]
+        removedState.vector = await removedState.vector.multiplyScalar(Math.sqrt(1 / probabilityLeft))
+
+        return { state: removedState, measurement: bitMeasured }
+    }
+
+    async reset(qbit) {
+        // measure that qbit to get it out of superposition
+        const measureResult = await this.measure(qbit)
+        let newState = measureResult.state
+
+        // if the measurement happens to be 1, flip it to 0
+        if (measureResult.measurement == 1) {
+            newState = await (new Gate("X")).apply(newState, [qbit])
         }
 
-        const stateScaleFactor = Math.sqrt(1 / probabilitiesSum)
-
-        removedState.vector = await removedState.vector.multiplyScalar(stateScaleFactor)
-
-        return removedState
+        return newState
     }
 }
