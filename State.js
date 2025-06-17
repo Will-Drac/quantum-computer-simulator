@@ -36,23 +36,17 @@ class State {
             }
         })
 
-        const newRealTexture = device.createTexture({
-            dimension: "2d",
-            size: [2 ** this.numQbits, 1, 1],
-            format: "r32float",
-            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
-        })
-
-        const newImaginaryTexture = device.createTexture({
-            dimension: "2d",
-            size: [2 ** this.numQbits, 1, 1],
-            format: "r32float",
-            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
-        })
-
+        let newRealTexture, newImaginaryTexture
 
         // the real part first
         if (this.vector.hasReal) {
+            newRealTexture = device.createTexture({
+                dimension: "2d",
+                size: [2 ** this.numQbits, 1, 1],
+                format: "r32float",
+                usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
+            })
+
             const swapBindGroupReal = device.createBindGroup({
                 label: "swap qbits bind group real",
                 layout: swapPipeline.getBindGroupLayout(0),
@@ -75,6 +69,13 @@ class State {
 
         // then the imaginary part
         if (this.vector.hasImaginary) {
+            newImaginaryTexture = device.createTexture({
+                dimension: "2d",
+                size: [2 ** this.numQbits, 1, 1],
+                format: "r32float",
+                usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
+            })
+
             const swapBindGroupImaginary = device.createBindGroup({
                 label: "swap qbits bind group imaginary",
                 layout: swapPipeline.getBindGroupLayout(0),

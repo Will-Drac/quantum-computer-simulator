@@ -1,5 +1,6 @@
 const GateDefinitions = {
     // singles
+    // !gphase
     U: {
         real: function UR(inputs) {
             const theta = inputs[0]; const phi = inputs[1]; const lambda = inputs[2]

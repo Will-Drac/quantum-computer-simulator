@@ -28,17 +28,19 @@ async function main() {
 
 
 
-    let state = new State(2)
+    let state = new State(10)
+    let controlledGate = new Gate("X")
 
-    state = await (new Gate("RY", [Math.PI/2.5])).apply(state, [0])
-    state = await (new Gate("CX")).apply(state, [0, 1])
-    state = await (new Gate("RY", [Math.PI/4])).apply(state, [0])
+    state = await (new Gate("H")).apply(state, [0])
 
-    state = await state.reset(0)
+    for (let i = 0; i < 9; i++) {
+        // state = await (new Gate("H")).apply(state, [i])
 
-    // const measurementResult = await state.measure(0)
-    // state = measurementResult.state
-    // console.log(measurementResult.measurement)
+        controlledGate = await controlledGate.addNegativeControl()
+    }
+
+    state = await controlledGate.apply(state, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+
 
     console.log(await state.vector.real.getEntries(), await state.vector.imaginary.getEntries())
     console.log(await state.getProbabilities())
