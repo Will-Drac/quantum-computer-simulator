@@ -1,6 +1,5 @@
 const GateDefinitions = {
     // singles
-    // !gphase
     U: {
         real: function UR(inputs) {
             const theta = inputs[0]; const phi = inputs[1]; const lambda = inputs[2]
@@ -30,7 +29,8 @@ const GateDefinitions = {
         },
         hasReal: true,
         hasImaginary: true,
-        size: 1
+        size: 1,
+        controls: []
     },
     I: {
         real: [
@@ -43,7 +43,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: false,
-        size: 1
+        size: 1,
+        controls: []
     },
     X: {
         real: [
@@ -56,7 +57,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: false,
-        size: 1
+        size: 1,
+        controls: []
     },
     Y: {
         real: [
@@ -69,7 +71,8 @@ const GateDefinitions = {
         ],
         hasReal: false,
         hasImaginary: true,
-        size: 1
+        size: 1,
+        controls: []
     },
     Z: {
         real: [
@@ -82,7 +85,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: false,
-        size: 1
+        size: 1,
+        controls: []
     },
     H: {
         real: [
@@ -95,7 +99,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: false,
-        size: 1
+        size: 1,
+        controls: []
     },
     S: {
         real: [
@@ -108,7 +113,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: true,
-        size: 1
+        size: 1,
+        controls: []
     },
     SDG: {
         real: [
@@ -121,7 +127,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: true,
-        size: 1
+        size: 1,
+        controls: []
     },
     T: {
         real: [
@@ -134,7 +141,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: true,
-        size: 1
+        size: 1,
+        controls: []
     },
     TDG: {
         real: [
@@ -147,7 +155,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: true,
-        size: 1
+        size: 1,
+        controls: []
     },
     SX: {
         real: [
@@ -160,7 +169,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: true,
-        size: 1
+        size: 1,
+        controls: []
     },
     P: {
         real: function PR(inputs) {
@@ -179,7 +189,8 @@ const GateDefinitions = {
         },
         hasReal: true,
         hasImaginary: true,
-        size: 1
+        size: 1,
+        controls: []
     },
     RX: {
         real: function RXR(inputs) {
@@ -198,7 +209,8 @@ const GateDefinitions = {
         },
         hasReal: true,
         hasImaginary: true,
-        size: 1
+        size: 1,
+        controls: []
     },
     RY: {
         real: function RYR(inputs) {
@@ -214,7 +226,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: false,
-        size: 1
+        size: 1,
+        controls: []
     },
     RZ: {
         real: function RZR(inputs) {
@@ -233,7 +246,8 @@ const GateDefinitions = {
         },
         hasReal: true,
         hasImaginary: true,
-        size: 1
+        size: 1,
+        controls: []
     },
 
     // doubles
@@ -258,7 +272,8 @@ const GateDefinitions = {
         },
         hasReal: true,
         hasImaginary: true,
-        size: 2
+        size: 2,
+        controls: ["pos"]
     },
     CX: {
         real: [
@@ -275,7 +290,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: false,
-        size: 2
+        size: 2,
+        controls: ["pos"]
     },
     CY: {
         real: [
@@ -292,7 +308,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: true,
-        size: 2
+        size: 2,
+        controls: ["pos"]
     },
     CZ: {
         real: [
@@ -309,7 +326,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: false,
-        size: 2
+        size: 2,
+        controls: ["pos"]
     },
     CP: {
         real: function CPR(inputs) {
@@ -332,7 +350,8 @@ const GateDefinitions = {
         },
         hasReal: true,
         hasImaginary: true,
-        size: 2
+        size: 2,
+        controls: ["pos"]
     },
     CRX: {
         real: function CRXR(inputs) {
@@ -355,7 +374,8 @@ const GateDefinitions = {
         },
         hasReal: true,
         hasImaginary: true,
-        size: 2
+        size: 2,
+        controls: ["pos"]
     },
     CRY: {
         real: function CRYR(inputs) {
@@ -375,7 +395,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: false,
-        size: 2
+        size: 2,
+        controls: ["pos"]
     },
     CRZ: {
         real: function CRZR(inputs) {
@@ -398,7 +419,8 @@ const GateDefinitions = {
         },
         hasReal: true,
         hasImaginary: true,
-        size: 2
+        size: 2,
+        controls: ["pos"]
     },
     CH: {
         real: [
@@ -415,7 +437,26 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: false,
-        size: 2
+        size: 2,
+        controls: ["pos"]
+    },
+    SWAP: {
+        real: [
+            [1, 0, 0, 0],
+            [0, 0, 1, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 1]
+        ],
+        imaginary: [
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0]
+        ],
+        hasReal: true,
+        hasImaginary: false,
+        size: 2,
+        controls: []
     },
 
     // triples
@@ -442,7 +483,8 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: false,
-        size: 3
+        size: 3,
+        controls: ["pos", "pos"]
     },
     CSWAP: {
         real: [
@@ -467,6 +509,7 @@ const GateDefinitions = {
         ],
         hasReal: true,
         hasImaginary: false,
-        size: 3
+        size: 3,
+        controls: ["pos"]
     }
 }

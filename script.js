@@ -28,18 +28,23 @@ async function main() {
 
 
 
-    let state = new State(10)
-    let controlledGate = new Gate("X")
+    let state = new State(3)
 
-    state = await (new Gate("H")).apply(state, [0])
+    let G = new Gate("GPHASE", [3*Math.PI/2])
 
-    for (let i = 0; i < 9; i++) {
-        // state = await (new Gate("H")).apply(state, [i])
+    G = await G.addControl()
+    G = await G.addNegativeControl()
 
-        controlledGate = await controlledGate.addNegativeControl()
-    }
+    const SM = await G.getStateMatrixGPhase(3, [2, 1])
+    console.log(await SM.real.getEntries(), await SM.imaginary.getEntries())
 
-    state = await controlledGate.apply(state, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    state = await (new Gate("X")).apply(state, [1])
+    state = await (new Gate("X")).apply(state, [2])
+
+    console.log(G.controls)
+
+    state = await G.apply(state, [2, 1])
+
 
 
     console.log(await state.vector.real.getEntries(), await state.vector.imaginary.getEntries())
