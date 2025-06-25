@@ -5,6 +5,7 @@ class Gate {
         this.gateID = gateID
         this.qbitsAffected = isSpecialGate ? undefined : GateDefinitions[gateID].size
         this.controls = isSpecialGate ? [] : GateDefinitions[gateID].controls
+        this.inputs = inputs
 
         if (!isSpecialGate) { //SWAP and GPHASE work with their own shaders and CUSTOM will be done manually
             this.originalMatrix = new ComplexMatrix(2 ** this.qbitsAffected, 2 ** this.qbitsAffected)
@@ -32,10 +33,20 @@ class Gate {
             this.originalMatrix.real.getTexture()
             this.originalMatrix.imaginary.getTexture()
         }
-        else {
-            this.inputs = inputs
-            console.log(this.inputs)
-        }
+    }
+
+    async inverse() {
+        const newGate = new Gate(this.gateID, this.inputs)
+        newGate.controls = this.controls
+        newGate.originalMatrix = await this.originalMatrix.inverse()
+        return newGate
+    }
+
+    async power(exponent) {
+        const newGate = new Gate(this.gateID, this.inputs)
+        newGate.controls = this.controls
+        newGate.originalMatrix = await this.originalMatrix.power(exponent)
+        return newGate
     }
 
     // the control always becomes the 0th qbit
@@ -333,8 +344,6 @@ class Gate {
         }
         controlsString += ");"
 
-        console.log(controlsString)
-
         const newRealTexture = device.createTexture({
             dimension: "2d",
             size: [dimension, dimension, 1],
@@ -466,3 +475,5 @@ class Gate {
         }
     }
 }
+
+// ! adding the controls should not be done in script.js, it should be done whenever is actually best to do it (the latest possible) because of powers and inverse

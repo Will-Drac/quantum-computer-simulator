@@ -513,3 +513,5 @@ const GateDefinitions = {
         controls: ["pos"]
     }
 }
+
+// ! i think all gates that aren't singles will need to be composed of only controlled single gates so that i can inverse and exponentiate
