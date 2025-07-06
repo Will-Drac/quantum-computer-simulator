@@ -20,13 +20,14 @@ async function main() {
         return
     }
 
+    // !max column that can be stored is 2^30, so max 30 qbits
     console.log(`${Math.floor(Math.log2(maxStorageBufferBindingSize/4))} qbits are possible on this device`)
 
-    let u = new Unitary(0, 0, Math.PI)
+    let u = new Unitary(Math.PI/2, 0, Math.PI)
 
-    let m = new GateMatrix(u, 16, [], 2)
+    let m = new GateMatrix(u, 3, [[0, "pos"], [2, "neg"]], 1)
     await m.create()
-    console.log(await readGateMatrix(m.entries[0]))
+    console.log(await readGateMatrix(m.entries[0]), await readGateMatrix(m.entries[1]))
 }
 
 main()
@@ -55,7 +56,7 @@ async function readGateMatrix(buffer) {
 
     let data = []
     for (let i = 0; i < result.length; i++) {
-        const is1 = result[i] >> 31 == 1
+        const is1 = result[i] >> 31 == -1
         const rowOfOriginal = result[i] >> 30 & 1
         const column = result[i] & 0x3FFFFFF
 

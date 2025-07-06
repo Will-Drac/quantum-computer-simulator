@@ -1,8 +1,9 @@
-@group(0) @binding(0) var originalVector: texture_2d<f32>;
-@group(0) @binding(1) var outputVector: texture_storage_2d<r32float, read_write>;
+@group(0) @binding(0) var<storage, read> oldEntries: array<u32>;
+@group(0) @binding(1) var<storage, read_write> newEntries: array<u32>;
 
 const qbit1 = _Q1;
 const qbit2 = _Q2;
+const workgroupsPerDimension = _WORKGROUPSPERDIM;
 
 // thanks to chatgpt for this
 fn swapBits(x: u32, i: u32, j: u32) -> u32 {
@@ -26,10 +27,9 @@ fn swapBits(x: u32, i: u32, j: u32) -> u32 {
 @compute @workgroup_size(1)fn swapQbits(
     @builtin(global_invocation_id) id: vec3u
 ) {
-    // the value at id.xy in outputVector will become the value at idToSwapTo in the input vector
-    let idToSwapTo = vec2u(swapBits(id.x, qbit1, qbit2), id.y);
+    let row = id.x * workgroupsPerDimension + id.y;
 
-    let swappedValue = textureLoad(originalVector, idToSwapTo, 0);
+    let rowToSwapTo = swapBits(row, qbit1, qbit2);
 
-    textureStore(outputVector, id.xy, swappedValue);
+    newEntries[row] = oldEntries[rowToSwapTo];
 }

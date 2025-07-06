@@ -1,5 +1,5 @@
 class GateMatrix {
-    constructor(unitary, numQbits, controls, qbitApplied) { //controls is ["pos" or "neg"], ...] where the last will be at qbit0
+    constructor(unitary, numQbits, controls, qbitApplied) { //controls is [[qbit, "pos" or "neg"], ...] where the last will be at qbit0
         this.unitary = unitary
 
         // creating an entries object for the single gate matrix, or two if there is more than one value per row
@@ -72,9 +72,19 @@ class GateMatrix {
             this.entries[0].unmap()
         }
 
+        // the first `this.controls.length` qbits are reserved for controls, for now. they will get switched later
+        const freeQbits = this.numQbits - this.controls.length
+        let newAppliedIndex = this.qbitApplied - this.controls.length
+
+        let temporaryAppliedQbit = null
+        if (newAppliedIndex < 0) { //the qbit to apply to has been reserved for a control
+            newAppliedIndex = 0
+            temporaryAppliedQbit = 0
+        }
+
         // how many I2 matrices get applied before and after the gate does
-        const IBeforeGate = this.qbitApplied
-        const IAfterGate = this.numQbits - this.qbitApplied - this.controls.length - 1
+        const IBeforeGate = freeQbits - newAppliedIndex - 1
+        const IAfterGate = newAppliedIndex
 
         // apply all the I matrices before and after the gate
         if (IBeforeGate > 0) {
@@ -87,14 +97,33 @@ class GateMatrix {
                 this.entries[i] = await this.kroneckerI(2 ** IAfterGate, "left", this.entries[i]) //size doubles with each I
             }
         }
+
+        // now add the controls
+        for (let i = 0; i < this.controls.length; i++) {
+            for (let j = 0; j < this.entries.length; j++) {
+                this.entries[j] = await this.addControl(this.controls[i][1], this.entries[j], j == 0)
+            }
+        }
+
+        // finally, since the controls get added as the first qbits by default, we have to swap the qbits indices in the matrix so that the controls are in the right place
+        for (let j = 0; j < this.entries.length; j++) {
+            for (let i = this.controls.length - 1; i >= 0; i--) {
+                this.entries[j] = await this.swapQbits(i, this.controls[i][0], this.entries[j])
+                if (this.controls[i][0] == temporaryAppliedQbit) { temporaryAppliedQbit = i } //keep track of where the temporary applied qbit goes, it might get swapped
+            }
+
+            // now put the applied qbit back where it should be
+            this.entries[j] = await this.swapQbits(this.qbitApplied, temporaryAppliedQbit, this.entries[j])
+        }
+
     }
 
 
     // only does kronecker on one "matrix" (with one column per row)
     async kroneckerI(ISize, ISide, entries) { //the size of the I matrix (1, I2, I4, etc) and whether I is on the "left" or "right"
-        const oldSize = entries.size/4
-        const newNumRows = oldSize * ISize
-        const workgroupsPerDimension = Math.ceil(Math.sqrt(newNumRows))
+        const oldSize = entries.size / 4
+        const newSize = oldSize * ISize
+        const workgroupsPerDimension = Math.ceil(Math.sqrt(newSize))
 
         const kiModule = device.createShaderModule({
             code: (await loadWGSL(ISide == "left" ? "./shaders/kroneckerILeft.wgsl" : "./shaders/kroneckerIRight.wgsl"))
@@ -111,7 +140,7 @@ class GateMatrix {
         })
 
         const newEntries = device.createBuffer({
-            size: 4 * newNumRows,
+            size: 4 * newSize,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
         })
 
@@ -131,6 +160,97 @@ class GateMatrix {
         kiPass.end()
 
         device.queue.submit([kiEncoder.finish()])
+
+        return newEntries
+    }
+
+    async addControl(type, entries, isEntries0) { //type is "pos" or "neg"
+        console.log(type, entries, isEntries0)
+        const oldSize = entries.size / 4
+        const newSize = oldSize * 2
+        const workgroupsPerDimension = Math.ceil(Math.sqrt(newSize))
+
+        const cModule = device.createShaderModule({
+            code: (await loadWGSL(type == "pos" ? "shaders/addControl.wgsl" : "shaders/addNegativeControl.wgsl"))
+                .replace("_SIZE", newSize)
+                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
+                .replace("_ISENTRIES0", isEntries0)
+        })
+
+        const cPipeline = device.createComputePipeline({
+            layout: "auto",
+            compute: {
+                module: cModule
+            }
+        })
+
+        const newEntries = device.createBuffer({
+            size: 4 * newSize,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+        })
+
+        const cBindGroup = device.createBindGroup({
+            layout: cPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: { buffer: entries } },
+                { binding: 1, resource: { buffer: newEntries } }
+            ]
+        })
+
+        const cEncoder = device.createCommandEncoder()
+        const cPass = cEncoder.beginComputePass()
+        cPass.setPipeline(cPipeline)
+        cPass.setBindGroup(0, cBindGroup)
+        cPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
+        cPass.end()
+
+        device.queue.submit([cEncoder.finish()])
+
+        return newEntries
+    }
+
+    async swapQbits(qbit1, qbit2, entries) {
+        if (qbit1 == qbit2 || qbit1==null || qbit2 == null) { return entries }
+
+        console.log(qbit1, qbit2)
+
+        const workgroupsPerDimension = Math.ceil(Math.sqrt(entries.size / 4))
+
+        const sModule = device.createShaderModule({
+            code: (await loadWGSL("/shaders/swap.wgsl"))
+                .replace("_Q1", qbit1)
+                .replace("_Q2", qbit2)
+                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
+        })
+
+        const sPipeline = device.createComputePipeline({
+            layout: "auto",
+            compute: {
+                module: sModule
+            }
+        })
+
+        const newEntries = device.createBuffer({
+            size: entries.size,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+        })
+
+        const sBindGroup = device.createBindGroup({
+            layout: sPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: { buffer: entries } },
+                { binding: 1, resource: { buffer: newEntries } }
+            ]
+        })
+
+        const sEncoder = device.createCommandEncoder()
+        const sPass = sEncoder.beginComputePass()
+        sPass.setPipeline(sPipeline)
+        sPass.setBindGroup(0, sBindGroup)
+        sPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
+        sPass.end()
+
+        device.queue.submit([sEncoder.finish()])
 
         return newEntries
     }
