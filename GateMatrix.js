@@ -16,7 +16,7 @@ class GateMatrix {
 
 
     async create() {
-        if (this.unitary.has2ColPerRow) {
+        if (this.unitary.modified.has2ColPerRow) {
             // for the first column:
             this.entries.push(device.createBuffer({
                 size: 4 * 2,
@@ -50,7 +50,7 @@ class GateMatrix {
             let entriesVal0 = 0
             let entriesVal1 = 0
 
-            if (this.unitary.real[0][0] == 0 && this.unitary.imag[0][0] == 0) { //this entry will represent [0][1]
+            if (this.unitary.modified.real[0][0] == 0 && this.unitary.modified.imag[0][0] == 0) { //this entry will represent [0][1]
                 entriesVal0 = 0 << 31 | 0 << 30 | 1 //not 1 | row 0 in original matrix (column 1 not implied but written down) | column 1
                 this.val0Col = 1
             }
@@ -59,7 +59,7 @@ class GateMatrix {
                 this.val0Col = 0
             }
 
-            if (this.unitary.real[1][0] == 0 && this.unitary.imag[1][0] == 0) { //this entry will represent [1][1]
+            if (this.unitary.modified.real[1][0] == 0 && this.unitary.modified.imag[1][0] == 0) { //this entry will represent [1][1]
                 entriesVal1 = 0 << 31 | 1 << 30 | 1 //not 1 | row 1 in original matrix (column 1 not implied but written down) | column 1
                 this.val1Col = 1
             }

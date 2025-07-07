@@ -24,10 +24,15 @@ async function main() {
     console.log(`${Math.floor(Math.log2(maxStorageBufferBindingSize/4))} qbits are possible on this device`)
 
     let u = new Unitary(Math.PI/2, 0, Math.PI)
+    u.modify(new Modifier("control"))
+    u.modify(new Modifier("power", 2.3))
+    u.modify(new Modifier("control"))
 
-    let m = new GateMatrix(u, 3, [[0, "pos"], [2, "neg"]], 1)
-    await m.create()
-    console.log(await readGateMatrix(m.entries[0]), await readGateMatrix(m.entries[1]))
+    await u.getGateMatrix(4, [0, 3], 1)
+
+    console.log(await readGateMatrix(u.gateMatrix.entries[0]))
+
+    debugger
 }
 
 main()
