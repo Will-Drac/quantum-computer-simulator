@@ -6,8 +6,8 @@ class GateMatrix {
         this.entries = []
 
         // if there is only one non-zero value per row, we collapse it to be represented in one buffer, but the convention that column 0 will be in the first buffer and column 1 in the second is no longer possible, so we have to write down which column in the original matrix each row links to (it will only be one, because only one non-zero)
-        this.val0Col = undefined
-        this.val1Col = undefined
+        this.row0Col = undefined
+        this.row1Col = undefined
 
         this.numQbits = numQbits
         this.controls = controls
@@ -16,6 +16,7 @@ class GateMatrix {
 
 
     async create() {
+        // putting the 2x2 "modified" matrix into a buffer for the GPU
         if (this.unitary.modified.has2ColPerRow) {
             // for the first column:
             this.entries.push(device.createBuffer({
@@ -50,72 +51,38 @@ class GateMatrix {
             let entriesVal0 = 0
             let entriesVal1 = 0
 
-            if (this.unitary.modified.real[0][0] == 0 && this.unitary.modified.imag[0][0] == 0) { //this entry will represent [0][1]
+            if (equals0(this.unitary.modified.real[0][0]) && equals0(this.unitary.modified.imag[0][0])) { //this entry will represent [0][1]
                 entriesVal0 = 0 << 31 | 0 << 30 | 1 //not 1 | row 0 in original matrix (column 1 not implied but written down) | column 1
-                this.val0Col = 1
+                this.row0Col = 1
             }
             else { //this entry will represent [0][0]
                 entriesVal0 = 0 << 31 | 0 << 30 | 0 //not 1 | row 0 in original matrix (column 0 not implied but written down) | column 0
-                this.val0Col = 0
+                this.row0Col = 0
             }
 
-            if (this.unitary.modified.real[1][0] == 0 && this.unitary.modified.imag[1][0] == 0) { //this entry will represent [1][1]
+            if (equals0(this.unitary.modified.real[1][0]) && equals0(this.unitary.modified.imag[1][0])) { //this entry will represent [1][1]
                 entriesVal1 = 0 << 31 | 1 << 30 | 1 //not 1 | row 1 in original matrix (column 1 not implied but written down) | column 1
-                this.val1Col = 1
+                this.row1Col = 1
             }
             else { //this entry will represent [1][0]
                 entriesVal1 = 0 << 31 | 1 << 30 | 0 //not 1 | row 1 in original matrix (column 0 not implied but written down) | column 0
-                this.val1Col = 0
+                this.row1Col = 0
             }
 
             new Uint32Array(this.entries[0].getMappedRange()).set(new Uint32Array([entriesVal0, entriesVal1]))
             this.entries[0].unmap()
         }
 
-        // the first `this.controls.length` qbits are reserved for controls, for now. they will get switched later
-        const freeQbits = this.numQbits - this.controls.length
-        let newAppliedIndex = this.qbitApplied - this.controls.length
+        // now creating the matrix to apply to the state
+        // we're making a matrix where the controls are first (the last one applied is at qbit 0) and then the transformation is applied to the next smallest
+        // before and after this gets applied to the state, the qbits will be swapped
 
-        let temporaryAppliedQbit = null
-        if (newAppliedIndex < 0) { //the qbit to apply to has been reserved for a control
-            newAppliedIndex = 0
-            temporaryAppliedQbit = 0
-        }
-
-        // how many I2 matrices get applied before and after the gate does
-        const IBeforeGate = freeQbits - newAppliedIndex - 1
-        const IAfterGate = newAppliedIndex
-
-        // apply all the I matrices before and after the gate
-        if (IBeforeGate > 0) {
-            for (let i = 0; i < this.entries.length; i++) {
-                this.entries[i] = await this.kroneckerI(2 ** IBeforeGate, "right", this.entries[i])
-            }
-        }
-        if (IAfterGate > 0) {
-            for (let i = 0; i < this.entries.length; i++) {
-                this.entries[i] = await this.kroneckerI(2 ** IAfterGate, "left", this.entries[i]) //size doubles with each I
-            }
-        }
-
-        // now add the controls
-        for (let i = 0; i < this.controls.length; i++) {
-            for (let j = 0; j < this.entries.length; j++) {
+        for (let j = 0; j < this.entries.length; j++) {
+            for (let i = 0; i < this.controls.length; i++) {
                 this.entries[j] = await this.addControl(this.controls[i][1], this.entries[j], j == 0)
             }
+            this.entries[j] = await this.kroneckerI(2**(this.numQbits-this.controls.length-1), "left", this.entries[j])
         }
-
-        // finally, since the controls get added as the first qbits by default, we have to swap the qbits indices in the matrix so that the controls are in the right place
-        for (let j = 0; j < this.entries.length; j++) {
-            for (let i = this.controls.length - 1; i >= 0; i--) {
-                this.entries[j] = await this.swapQbits(i, this.controls[i][0], this.entries[j])
-                if (this.controls[i][0] == temporaryAppliedQbit) { temporaryAppliedQbit = i } //keep track of where the temporary applied qbit goes, it might get swapped
-            }
-
-            // now put the applied qbit back where it should be
-            this.entries[j] = await this.swapQbits(this.qbitApplied, temporaryAppliedQbit, this.entries[j])
-        }
-
     }
 
 
@@ -165,7 +132,6 @@ class GateMatrix {
     }
 
     async addControl(type, entries, isEntries0) { //type is "pos" or "neg"
-        console.log(type, entries, isEntries0)
         const oldSize = entries.size / 4
         const newSize = oldSize * 2
         const workgroupsPerDimension = Math.ceil(Math.sqrt(newSize))
@@ -205,52 +171,6 @@ class GateMatrix {
         cPass.end()
 
         device.queue.submit([cEncoder.finish()])
-
-        return newEntries
-    }
-
-    async swapQbits(qbit1, qbit2, entries) {
-        if (qbit1 == qbit2 || qbit1==null || qbit2 == null) { return entries }
-
-        console.log(qbit1, qbit2)
-
-        const workgroupsPerDimension = Math.ceil(Math.sqrt(entries.size / 4))
-
-        const sModule = device.createShaderModule({
-            code: (await loadWGSL("/shaders/swap.wgsl"))
-                .replace("_Q1", qbit1)
-                .replace("_Q2", qbit2)
-                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
-        })
-
-        const sPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: {
-                module: sModule
-            }
-        })
-
-        const newEntries = device.createBuffer({
-            size: entries.size,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-        })
-
-        const sBindGroup = device.createBindGroup({
-            layout: sPipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: entries } },
-                { binding: 1, resource: { buffer: newEntries } }
-            ]
-        })
-
-        const sEncoder = device.createCommandEncoder()
-        const sPass = sEncoder.beginComputePass()
-        sPass.setPipeline(sPipeline)
-        sPass.setBindGroup(0, sBindGroup)
-        sPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
-        sPass.end()
-
-        device.queue.submit([sEncoder.finish()])
 
         return newEntries
     }

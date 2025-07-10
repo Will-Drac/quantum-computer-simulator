@@ -10,36 +10,37 @@ class Unitary {
         this.original = {}
         this.modified = {}
 
+        const sinTheta2 = Math.sin(theta / 2)
+        const cosTheta2 = Math.cos(theta / 2)
+
+        //! this is wrong
         this.original.real = [
             [
-                0.5 * (1 + Math.cos(theta)),
-                0.5 * (Math.sin(lambda) * (1 - Math.cos(theta)) - Math.cos(lambda) * Math.sin(theta))
+                correct0Precision(cosTheta2),
+                correct0Precision(-Math.cos(lambda) * sinTheta2)
             ],
             [
-                0.5 * (Math.cos(phi) * Math.sin(theta)) - Math.sin(phi) * (1 - Math.cos(theta)),
-                0.5 * (Math.cos(phi + lambda) * (1 + Math.cos(theta)) - Math.sin(phi + lambda) * Math.sin(theta))
+                correct0Precision(Math.cos(phi) * sinTheta2),
+                correct0Precision(Math.cos(phi + lambda) * cosTheta2)
             ]
         ]
         this.original.imag = [
             [
-                0.5 * (Math.sin(theta)),
-                0.5 * (-Math.cos(lambda) * (1 - Math.cos(theta)) - Math.sin(lambda) * Math.sin(theta))
+                0,
+                correct0Precision(-Math.sin(lambda) * sinTheta2)
             ],
             [
-                0.5 * (Math.cos(phi) * (1 - Math.cos(theta)) + Math.sin(phi) * Math.sin(theta)),
-                0.5 * (Math.cos(phi + lambda) * Math.sin(theta) + Math.sin(phi + lambda) * (1 + Math.cos(theta)))
+                correct0Precision(Math.sin(phi) * sinTheta2),
+                correct0Precision(Math.sin(phi + lambda) * cosTheta2)
             ]
         ]
 
         this.modifiers = [] //stores a list of Modifiers
 
-        this.original.hasReal = !equals0(this.original.real[0][0]) && !equals0(this.original.real[0][1]) && !equals0(this.original.real[1][0]) && !equals0(this.original.real[1][1])
-        this.original.hasImag = !equals0(this.original.imag[0][0]) && !equals0(this.original.imag[0][1]) && !equals0(this.original.imag[1][0]) && !equals0(this.original.imag[1][1])
-
         this.original.has2ColPerRow =
-            (!equals0(this.original.real[0][0]) && !equals0(this.original.real[0][1]) && !equals0(this.original.imag[0][0]) && !equals0(this.original.imag[0][1]))
+            ((!equals0(this.original.real[0][0]) || !equals0(this.original.imag[0][0])) && (!equals0(this.original.real[0][1]) || !equals0(this.original.imag[0][1])))
             ||
-            (!equals0(this.original.real[1][0]) && !equals0(this.original.real[1][1]) && !equals0(this.original.imag[1][0]) && !equals0(this.original.imag[1][1]))
+            ((!equals0(this.original.real[1][0]) || !equals0(this.original.imag[1][0])) && (!equals0(this.original.real[1][1]) || !equals0(this.original.imag[1][1])))
 
         // some unitaries have only one row filled in for each real and imaginary, but im ignoring that potential speed up
     }
@@ -69,38 +70,23 @@ class Unitary {
         else {
             this.power(exponent)
         }
+
+        this.modified.has2ColPerRow =
+            ((!equals0(this.modified.real[0][0]) || !equals0(this.modified.imag[0][0])) && (!equals0(this.modified.real[0][1]) || !equals0(this.modified.imag[0][1])))
+            ||
+            ((!equals0(this.modified.real[1][0]) || !equals0(this.modified.imag[1][0])) && (!equals0(this.modified.real[1][1]) || !equals0(this.modified.imag[1][1])))
     }
 
     inverse() {
-        if (this.original.hasReal) {
-            this.modified.real = [
-                [this.original.real[0][0], this.original.real[1][0]],
-                [this.original.real[0][1], this.original.real[1][1]]
-            ]
-            this.modified.hasReal = true
-        }
-        else {
-            this.modified.real = [
-                [0, 0],
-                [0, 0]
-            ]
-            this.modified.hasReal = false
-        }
+        this.modified.real = [
+            [this.original.real[0][0], this.original.real[1][0]],
+            [this.original.real[0][1], this.original.real[1][1]]
+        ]
 
-        if (this.original.hasImag) {
-            this.modified.imag = [
-                [-this.original.imag[0][0], -this.original.imag[1][0]],
-                [-this.original.imag[0][1], -this.original.imag[1][1]]
-            ]
-            this.modified.hasImag = true
-        }
-        else {
-            this.modified.imag = [
-                [0, 0],
-                [0, 0]
-            ]
-            this.modified.hasImag = false
-        }
+        this.modified.imag = [
+            [-this.original.imag[0][0], -this.original.imag[1][0]],
+            [-this.original.imag[0][1], -this.original.imag[1][1]]
+        ]
     }
 
     power(exponent) { //raises the matrix to a power
@@ -298,10 +284,6 @@ class Unitary {
 
         this.modified.real = A_K_r
         this.modified.imag = A_K_i
-
-        // this might not actually be true, but i dont care really, good enough
-        this.modified.hasReal = true
-        this.modified.hasImag = true
     }
 
     async getGateMatrix(numQbits, controlQbits, qbitApplied) { // controlQbits match the order of the modifiers added, where the last modifier added will correspond to the last entry in controlQbits
@@ -325,5 +307,127 @@ class Unitary {
 
         this.gateMatrix = G
         return this.gateMatrix
+    }
+
+    // applying the gate to the State
+    async apply(state, controlQbits, qbitApplied) {
+        await this.getGateMatrix(state.numQbits, controlQbits, qbitApplied)
+
+        // the gate matrix is assuming that all the controls are first (starting with most recently applied), then the modified unitary matrix, then nothing on the rest
+        // we need to swap the bit order to match this, apply the gate, then swap back
+
+        // im including the applied qbit here as the last entry in the array, the rest are the controls
+        let qbitsCurrentLocations = []
+        for (let i = 0; i < controlQbits.length; i++) {
+            qbitsCurrentLocations.push(controlQbits.length - i - 1)
+        }
+        qbitsCurrentLocations.push(controlQbits.length) //where the qbit to be applied to is
+
+        let qbitsTargetLocations = controlQbits
+        qbitsTargetLocations.push(qbitApplied)
+
+        let inverseSwaps = []
+        for (let i = 0; i < qbitsCurrentLocations.length; i++) {
+            // console.log(qbitsCurrentLocations, qbitsTargetLocations)
+            if (qbitsCurrentLocations[i] !== qbitsTargetLocations[i]) {
+                inverseSwaps.push([qbitsCurrentLocations[i], qbitsTargetLocations[i]])
+
+                // if we happened to displace another important one, keep track of that
+                for (let j = 0; j < qbitsCurrentLocations.length; j++) {
+                    if (qbitsCurrentLocations[j] == qbitsTargetLocations[i]) {
+                        qbitsCurrentLocations[j] = qbitsCurrentLocations[i]
+                    }
+                }
+
+                qbitsCurrentLocations[i] = qbitsTargetLocations[i] //keep track of the intended switch too
+            }
+        }
+
+        let swaps = []
+        for (let i = inverseSwaps.length - 1; i >= 0; i--) {
+            swaps.push(inverseSwaps[i])
+        }
+
+        // after multiplying, we need to put the qbits back in order. that's what inverseSwaps is for
+
+        await state.swap(swaps)
+
+        const workgroupsPerDimension = Math.ceil(Math.sqrt(2 ** state.numQbits))
+
+        const matrixEntriesCode = `
+        const matrixEntriesReal = vec4f(${this.modified.real[0][0]}, ${this.modified.real[0][1]}, ${this.modified.real[1][0]}, ${this.modified.real[1][1]});
+        const matrixEntriesImag = vec4f(${this.modified.imag[0][0]}, ${this.modified.imag[0][1]}, ${this.modified.imag[1][0]}, ${this.modified.imag[1][1]});
+        `
+
+        // for when there's only 1 entries buffer representing either of the columns
+        const rowToColCode = `
+        const rowToCol = vec2u(${this.gateMatrix.row0Col}, ${this.gateMatrix.row1Col});
+        `
+
+        const aModule = device.createShaderModule({
+            code: (await loadWGSL(this.modified.has2ColPerRow ? "shaders/apply2Col.wgsl" : "shaders/apply1Col.wgsl"))
+                .replace("_ENTRIES", matrixEntriesCode)
+                .replace("_ROWCOL", rowToColCode)
+                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
+                .replace("_SIZE", 2 ** state.numQbits)
+        })
+
+        const aPipeline = device.createComputePipeline({
+            layout: "auto",
+            compute: {
+                module: aModule
+            }
+        })
+
+        const newVector = {
+            real: device.createBuffer({
+                size: 4 * 2 ** state.numQbits,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+            }),
+            imag: device.createBuffer({
+                size: 4 * 2 ** state.numQbits,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+            })
+        }
+
+        let bindGroupEntries
+
+        if (this.modified.has2ColPerRow) {
+            bindGroupEntries = [
+                { binding: 0, resource: { buffer: this.gateMatrix.entries[0] } },
+                { binding: 1, resource: { buffer: this.gateMatrix.entries[1] } }, //the entries from the second column
+                { binding: 2, resource: { buffer: state.vector.real } },
+                { binding: 3, resource: { buffer: state.vector.imag } },
+                { binding: 4, resource: { buffer: newVector.real } },
+                { binding: 5, resource: { buffer: newVector.imag } }
+            ]
+        }
+        else {
+            bindGroupEntries = [
+                { binding: 0, resource: { buffer: this.gateMatrix.entries[0] } },
+                { binding: 1, resource: { buffer: state.vector.real } },
+                { binding: 2, resource: { buffer: state.vector.imag } },
+                { binding: 3, resource: { buffer: newVector.real } },
+                { binding: 4, resource: { buffer: newVector.imag } }
+            ]
+        }
+
+        const aBindGroup = device.createBindGroup({
+            layout: aPipeline.getBindGroupLayout(0),
+            entries: bindGroupEntries
+        })
+
+        const aEncoder = device.createCommandEncoder()
+        const aPass = aEncoder.beginComputePass()
+        aPass.setPipeline(aPipeline)
+        aPass.setBindGroup(0, aBindGroup)
+        aPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
+        aPass.end()
+
+        device.queue.submit([aEncoder.finish()])
+
+        state.vector = newVector
+
+        await state.swap(inverseSwaps)
     }
 }
