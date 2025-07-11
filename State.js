@@ -76,4 +76,45 @@ class State {
         this.vector.real = newReal
         this.vector.imag = newImag
     }
+
+    async getProbabilities() {
+        const size = this.vector.real.size
+        const workgroupsPerDimension = Math.ceil(Math.sqrt(size))
+
+        const pModule = device.createShaderModule({
+            code: (await loadWGSL("shaders/stateProbabilities.wgsl"))
+                .replace("_SIZE", size)
+                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
+        })
+
+        const pPipeline = device.createComputePipeline({
+            layout: "auto",
+            compute: {
+                module: pModule
+            }
+        })
+
+        this.probabilities = device.createBuffer({
+            size: this.vector.real.size,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+        })
+
+        const pBindGroup = device.createBindGroup({
+            layout: pPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: { buffer: this.vector.real } },
+                { binding: 1, resource: { buffer: this.vector.imag } },
+                { binding: 2, resource: { buffer: this.probabilities } },
+            ]
+        })
+
+        const pEncoder = device.createCommandEncoder()
+        const pPass = pEncoder.beginComputePass()
+        pPass.setPipeline(pPipeline)
+        pPass.setBindGroup(0, pBindGroup)
+        pPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
+        pPass.end()
+
+        device.queue.submit([pEncoder.finish()])
+    }
 }

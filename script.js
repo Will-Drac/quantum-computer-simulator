@@ -28,19 +28,17 @@ async function main() {
     const X = new Unitary(Math.PI, 0, Math.PI)
     const H = new Unitary(Math.PI / 2, 0, 0)
 
-    await X.apply(state, [], 1)
-    await X.apply(state, [], 0)
+    await H.apply(state, [], 0)
 
-    // console.log(await readState(state))
+    const C1 = new Unitary(Math.PI/2, Math.PI/2, Math.PI/2)
+    await C1.apply(state, [], 1)
 
-    const CX = new Unitary(Math.PI, 0, Math.PI)
-    CX.modify(new Modifier("control"))
-    CX.modify(new Modifier("negativeControl"))
+    const C2 = new Unitary(Math.PI/3, Math.PI/6, Math.PI/2)
+    C2.modify(new Modifier("control"))
 
-    await CX.apply(state, [1, 0], 2)
+    await C2.apply(state, [1], 2)
 
-    // console.log(await readGateMatrix(CX.gateMatrix.entries[0]), await readGateMatrix(CX.gateMatrix.entries[1]))
-    console.log(await displayMatrix(CX.gateMatrix))
+    await state.getProbabilities()
 
     console.log(await readState(state))
 }
@@ -133,6 +131,10 @@ async function readState(state) {
         size: state.vector.imag.size,
         usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
     })
+    const readBufferProb = device.createBuffer({
+        size: state.probabilities.size,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    })
 
     const readEncoder = device.createCommandEncoder()
     readEncoder.copyBufferToBuffer(
@@ -140,6 +142,9 @@ async function readState(state) {
     )
     readEncoder.copyBufferToBuffer(
         state.vector.imag, 0, readBufferImag, 0, readBufferImag.size
+    )
+    readEncoder.copyBufferToBuffer(
+        state.probabilities, 0, readBufferProb, 0, readBufferProb.size
     )
 
     device.queue.submit([readEncoder.finish()])
@@ -150,5 +155,8 @@ async function readState(state) {
     await readBufferImag.mapAsync(GPUMapMode.READ)
     const resultImag = new Float32Array(readBufferImag.getMappedRange())
 
-    return { real: resultReal, imag: resultImag }
+    await readBufferProb.mapAsync(GPUMapMode.READ)
+    const resultProb = new Float32Array(readBufferProb.getMappedRange())
+
+    return { real: resultReal, imag: resultImag, prob: resultProb }
 }
