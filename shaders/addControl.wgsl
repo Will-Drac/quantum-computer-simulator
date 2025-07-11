@@ -11,13 +11,14 @@ const workgroupsPerDimension = _WORKGROUPSPERDIM;
     let newRow: u32 = id.x * workgroupsPerDimension + id.y;
 
     if newRow < size {
-        if (newRow % 2 == 0 && isEntries0) {
+        if (newRow % 2 == 0) {
             // this will be a 1 placed on the diagonal
             let newVal: u32 = (1u << 31) | newRow; //the column will just be the row, and we're appending that this value will be simply a 1
             newEntries[newRow] = newVal;
+            // note: this will place a 1 in both entries buffers. however, during application, the 1 in entries[1] will be ignored
         }
         else {
-            let oldRow = (newRow-1)/2; //points at the row in the old matrix holding this value
+            let oldRow = (newRow - 1) / 2; //points at the row in the old matrix holding this value
             let oldVal = oldEntries[oldRow];
             let data = oldVal >> 30; //preserve the data
             let oldColumnIndex = oldVal & 0x3FFFFFFF;

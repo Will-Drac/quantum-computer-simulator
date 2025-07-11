@@ -25,22 +25,24 @@ async function main() {
 
     let state = new State(3)
 
-    const X = new Unitary(Math.PI, 0, 0)
+    const X = new Unitary(Math.PI, 0, Math.PI)
     const H = new Unitary(Math.PI / 2, 0, 0)
 
-    await H.apply(state, [], 1)
+    await X.apply(state, [], 1)
+    await X.apply(state, [], 0)
 
-    console.log(await readState(state))
+    // console.log(await readState(state))
 
-    const CX = new Unitary(Math.PI/4, 0, 0)
+    const CX = new Unitary(Math.PI, 0, Math.PI)
     CX.modify(new Modifier("control"))
+    CX.modify(new Modifier("negativeControl"))
 
-    await CX.apply(state, [1], 2)
+    await CX.apply(state, [1, 0], 2)
+
+    // console.log(await readGateMatrix(CX.gateMatrix.entries[0]), await readGateMatrix(CX.gateMatrix.entries[1]))
+    console.log(await displayMatrix(CX.gateMatrix))
 
     console.log(await readState(state))
-
-    // !in this setup, the amplitudes dont add up to a probability of 1
-    // removing the control makes it good again
 }
 main()
 
@@ -83,7 +85,7 @@ async function readGateMatrix(buffer) {
 }
 
 async function displayMatrix(gateMatrix) {
-    const matrix = new Array(2 ** gateMatrix.numQbits).fill(null).map(() => new Array(2 ** gateMatrix.numQbits).fill(0))
+    const matrix = new Array(2 ** gateMatrix.numQbits).fill(null).map(() => new Array(2 ** gateMatrix.numQbits).fill("0.00+0.00i"))
 
     if (gateMatrix.unitary.modified.has2ColPerRow) {
         const data = [await readGateMatrix(gateMatrix.entries[0]), await readGateMatrix(gateMatrix.entries[1])]
@@ -91,13 +93,13 @@ async function displayMatrix(gateMatrix) {
             for (let j = 0; j < 2; j++) {
                 const d = data[j][i]
                 if (d.is1) {
-                    matrix[i][d.column] = 1
+                    matrix[i][d.column] = `1.00+0.00i`
                 }
                 else {
                     const entryReal = gateMatrix.unitary.modified.real[d.rowOfOriginal][j]
                     const entryImag = gateMatrix.unitary.modified.imag[d.rowOfOriginal][j]
 
-                    matrix[i][d.column] = `${entryReal}+${entryImag}i`
+                    matrix[i][d.column] = `${entryReal.toFixed(2)}+${entryImag.toFixed(2)}i`
                 }
             }
         }
@@ -107,14 +109,14 @@ async function displayMatrix(gateMatrix) {
         for (let i = 0; i < data.length; i++) {
             const d = data[i]
             if (d.is1) {
-                matrix[i][d.column] = 1
+                matrix[i][d.column] = `1.00+0.00i`
             }
             else {
                 const rowToCol = [gateMatrix.row0Col, gateMatrix.row1Col]
                 const entryReal = gateMatrix.unitary.modified.real[d.rowOfOriginal][rowToCol[d.rowOfOriginal]]
                 const entryImag = gateMatrix.unitary.modified.imag[d.rowOfOriginal][rowToCol[d.rowOfOriginal]]
 
-                matrix[i][d.column] = `${entryReal}+${entryImag}i`
+                matrix[i][d.column] = `${entryReal.toFixed(2)}+${entryImag.toFixed(2)}i`
             }
         }
     }

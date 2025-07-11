@@ -49,7 +49,7 @@ const size = _SIZE;
         var val1Real: f32 = 0;
         var val1Imag: f32 = 0;
         if (is11) {
-            val1Real = 1;
+            val1Real = 0;
             val1Imag = 0;
         }
         else {
