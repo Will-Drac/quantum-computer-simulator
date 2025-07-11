@@ -38,9 +38,11 @@ async function main() {
 
     await C2.apply(state, [1], 2)
 
-    await state.getProbabilities()
+    console.log(await state.reset(2))
 
     console.log(await readState(state))
+
+    // console.log(await state.getQbitProbability0(4))
 }
 main()
 
@@ -123,6 +125,8 @@ async function displayMatrix(gateMatrix) {
 }
 
 async function readState(state) {
+    await state.getProbabilities()
+
     const readBufferReal = device.createBuffer({
         size: state.vector.real.size,
         usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
