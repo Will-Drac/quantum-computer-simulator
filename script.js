@@ -28,21 +28,14 @@ async function main() {
     const X = new Unitary(Math.PI, 0, Math.PI)
     const H = new Unitary(Math.PI / 2, 0, 0)
 
+    const p = new GPhase(Math.PI/2)
+    p.modify(new Modifier("power", 4))
+
+    // await X.apply(state, [], 1)
     await H.apply(state, [], 0)
-
-    const C1 = new Unitary(Math.PI/2, Math.PI/2, Math.PI/2)
-    await C1.apply(state, [], 1)
-
-    const C2 = new Unitary(Math.PI/3, Math.PI/6, Math.PI/2)
-    C2.modify(new Modifier("control"))
-
-    await C2.apply(state, [1], 2)
-
-    console.log(await state.reset(2))
+    await p.apply(state, [])
 
     console.log(await readState(state))
-
-    // console.log(await state.getQbitProbability0(4))
 }
 main()
 
