@@ -41,6 +41,11 @@ async function main() {
 
     // await p.apply(state, [])
 
+    await X.apply(state, [1], 0, [], [new Modifier("negativeControl")])
+    await X.apply(state, [0], 1, [], [new Modifier("control")])
+    await X.apply(state, [], 2, [], [])
+    await X.apply(state, [], 0, [], [new Modifier("power", 2)])
+
     console.log(await readState(state))
 }
 main()

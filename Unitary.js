@@ -13,7 +13,6 @@ class Unitary {
     }
 
     getOriginalMatrix(inputs) {
-
         let theta, phi, lambda
 
         if (typeof (this.theta) == "number") { theta = this.theta }
@@ -63,16 +62,18 @@ class Unitary {
     }
 
     // applies the power and inverse modifiers to this.original to get this.modified
-    getModifiedMatrix(inputs) {
+    getModifiedMatrix(inputs, temporaryModifiers) {
         // first get the original matrix taking into account the inputs
         this.getOriginalMatrix(inputs)
 
+        const modifiers = this.modifiers.concat(temporaryModifiers)
+
         let exponent = 1
-        for (let i = 0; i < this.modifiers.length; i++) {
-            if (this.modifiers[i].type == "power") {
-                exponent *= this.modifiers[i].value
+        for (let i = 0; i < modifiers.length; i++) {
+            if (modifiers[i].type == "power") {
+                exponent *= modifiers[i].value
             }
-            else if (this.modifiers[i].type == "inverse") {
+            else if (modifiers[i].type == "inverse") {
                 exponent *= -1
             }
         }
@@ -301,20 +302,22 @@ class Unitary {
         this.modified.imag = A_K_i
     }
 
-    async getGateMatrix(numQbits, inputs) { // controlQbits match the order of the modifiers added, where the last modifier added will correspond to the last entry in controlQbits
+    async getGateMatrix(numQbits, inputs, temporaryModifiers) { // controlQbits match the order of the modifiers added, where the last modifier added will correspond to the last entry in controlQbits
         console.log("getting new gate matrix")
 
-        this.getModifiedMatrix(inputs)
+        this.getModifiedMatrix(inputs, temporaryModifiers)
 
         let controls = []
 
+        const modifiers = this.modifiers.concat(temporaryModifiers)
+
         let j = 0
-        for (let i = 0; i < this.modifiers.length; i++) {
-            if (this.modifiers[i].type == "control") {
+        for (let i = 0; i < modifiers.length; i++) {
+            if (modifiers[i].type == "control") {
                 controls.push("pos")
                 j++
             }
-            else if (this.modifiers[i].type == "negativeControl") {
+            else if (modifiers[i].type == "negativeControl") {
                 controls.push("neg")
                 j++
             }
@@ -327,10 +330,10 @@ class Unitary {
     }
 
     // applying the gate to the State
-    async apply(state, controlQbits, qbitApplied, inputs) {
+    async apply(state, controlQbits, qbitApplied, inputs, temporaryModifiers) { //temporaryModifiers is used for modifiers applied outside of a gate definition. these modifiers are only used in the Unitary for this one application
         // if the gate matrix hasnt been updated to the most recent parameters, we need to redefine it
-        if (!this.gateMatrixUpToDate(state.numQbits, inputs)) {
-            await this.getGateMatrix(state.numQbits, inputs)
+        if (!this.gateMatrixUpToDate(state.numQbits, inputs, temporaryModifiers)) {
+            await this.getGateMatrix(state.numQbits, inputs, temporaryModifiers)
         }
 
         // the gate matrix is assuming that all the controls are first (starting with most recently applied), then the modified unitary matrix, then nothing on the rest
@@ -451,10 +454,27 @@ class Unitary {
     }
 
     // checks if the current gate matrix has the same parameters as the current application call
-    gateMatrixUpToDate(numQbits, inputs) {
+    gateMatrixUpToDate(numQbits, inputs, temporaryModifiers) {
         if (this.previousParameters == undefined) {
-            this.previousParameters = { numQbits, inputs }
+            this.previousParameters = { numQbits, inputs, temporaryModifiers }
             return false
+        }
+
+        let temporaryModifiersMatch = true
+        if (this.previousParameters.temporaryModifiers.length == temporaryModifiers.length) {
+            for (let i = 0; i < temporaryModifiers.length; i++) {
+                if (
+                    this.previousParameters.temporaryModifiers[i].type !== temporaryModifiers[i].type
+                    ||
+                    this.previousParameters.temporaryModifiers[i].value !== temporaryModifiers[i].value
+                ) {
+                    temporaryModifiersMatch = false
+                    break
+                }
+            }
+        }
+        else {
+            temporaryModifiersMatch = false
         }
 
         let inputsMatch = true
@@ -466,8 +486,10 @@ class Unitary {
             this.previousParameters.numQbits == numQbits
             &&
             inputsMatch
+            &&
+            temporaryModifiersMatch
 
-        this.previousParameters = { numQbits, inputs }
+        this.previousParameters = { numQbits, inputs, temporaryModifiers }
 
         return upToDate
     }

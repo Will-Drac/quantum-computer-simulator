@@ -2,17 +2,19 @@ class GPhase {
     constructor(phase) {
         this.phase = phase
         this.modifiers = []
-        this.previousNumQbits = undefined
+        this.previousParameters = undefined
     }
 
     modify(modifier) {
         this.modifiers.push(modifier)
     }
 
-    async getGateMatrix(numQbits) { // controlQbits match the order of the modifiers added, where the last modifier added will correspond to the last entry in controlQbits
+    async getGateMatrix(numQbits, temporaryModifiers) { 
+        const modifiers = this.modifiers.concat(temporaryModifiers)
+
         let numControls = 0
-        for (let i = 0; i < this.modifiers.length; i++) {
-            if (this.modifiers[i].type == "control" || this.modifiers[i].type == "negativeControl") {
+        for (let i = 0; i < modifiers.length; i++) {
+            if (modifiers[i].type == "control" || modifiers[i].type == "negativeControl") {
                 numControls++
             }
         }
@@ -59,11 +61,11 @@ class GPhase {
 
         // now to add the controls
 
-        for (let i = 0; i < this.modifiers.length; i++) {
-            if (this.modifiers[i].type == "control") {
+        for (let i = 0; i < modifiers.length; i++) {
+            if (modifiers[i].type == "control") {
                 this.gateMatrix = await this.addControlGateMatrix("pos", this.gateMatrix)
             }
-            else if (this.modifiers[i].type == "negativeControl") {
+            else if (modifiers[i].type == "negativeControl") {
                 this.gateMatrix = await this.addControlGateMatrix("neg", this.gateMatrix)
             }
         }
@@ -113,20 +115,21 @@ class GPhase {
         return newEntries
     }
 
-    async apply(state, controlQbits) {
-        // if the gateMatrix is out of date from the number of qbits its affecting, create a new one
-        if(this.previousNumQbits !== state.numQbits) {
-            await this.getGateMatrix(state.numQbits)
-            this.previousNumQbits = state.numQbits
+    async apply(state, controlQbits, temporaryModifiers) { //temporaryModifiers is used for modifiers applied outside of a gate definition. these modifiers are only used in the GPhase for this one application
+        // if the gateMatrix is out of date from the number of qbits its affecting and the temporary modifiers, create a new one
+        if (!this.gateMatrixUpToDate) {
+            await this.getGateMatrix(state.numQbits, temporaryModifiers)
         }
+
+        const modifiers = this.modifiers.concat(temporaryModifiers)
 
         // we need to take into account the non-control modifiers in how this gate is changing the phase
         let phaseChange = this.phase
-        for (let i = 0; i < this.modifiers.length; i++) {
-            if (this.modifiers[i].type == "power") {
-                phaseChange *= this.modifiers[i].value
+        for (let i = 0; i < modifiers.length; i++) {
+            if (modifiers[i].type == "power") {
+                phaseChange *= modifiers[i].value
             }
-            else if (this.modifiers[i].type == "inverse") {
+            else if (modifiers[i].type == "inverse") {
                 phaseChange *= -1
             }
         }
@@ -232,5 +235,39 @@ class GPhase {
         state.vector = newVector
 
         await state.swap(inverseSwaps)
+    }
+
+    // checks if the current gate matrix has the same parameters as the current application call
+    gateMatrixUpToDate(numQbits, temporaryModifiers) {
+        if (this.previousParameters == undefined) {
+            this.previousParameters = { numQbits, temporaryModifiers }
+            return false
+        }
+
+        let temporaryModifiersMatch = true
+        if (this.previousParameters.temporaryModifiers.length == temporaryModifiers.length) {
+            for (let i = 0; i < temporaryModifiers.length; i++) {
+                if (
+                    this.previousParameters.temporaryModifiers[i].type !== temporaryModifiers[i].type
+                    ||
+                    this.previousParameters.temporaryModifiers[i].value !== temporaryModifiers[i].value
+                ) {
+                    temporaryModifiersMatch = false
+                    break
+                }
+            }
+        }
+        else {
+            temporaryModifiersMatch = false
+        }
+
+        let upToDate =
+            this.previousParameters.numQbits == numQbits
+            &&
+            temporaryModifiersMatch
+
+        this.previousParameters = { numQbits, temporaryModifiers }
+
+        return upToDate
     }
 }
