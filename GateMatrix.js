@@ -1,5 +1,5 @@
 class GateMatrix {
-    constructor(unitary, numQbits, controls, qbitApplied) { //controls is [[qbit, "pos" or "neg"], ...] where the last will be at qbit0
+    constructor(unitary, numQbits, controls) { //controls is ["pos" or "neg", ...] where the last will be at qbit0
         this.unitary = unitary
 
         // creating an entries object for the single gate matrix, or two if there is more than one value per row
@@ -11,7 +11,6 @@ class GateMatrix {
 
         this.numQbits = numQbits
         this.controls = controls
-        this.qbitApplied = qbitApplied
     }
 
 
@@ -79,9 +78,9 @@ class GateMatrix {
 
         for (let j = 0; j < this.entries.length; j++) {
             for (let i = 0; i < this.controls.length; i++) {
-                this.entries[j] = await this.addControl(this.controls[i][1], this.entries[j], j == 0)
+                this.entries[j] = await this.addControl(this.controls[i], this.entries[j], j == 0)
             }
-            this.entries[j] = await this.kroneckerI(2**(this.numQbits-this.controls.length-1), "left", this.entries[j])
+            this.entries[j] = await this.kroneckerI(2 ** (this.numQbits - this.controls.length - 1), "left", this.entries[j])
         }
     }
 

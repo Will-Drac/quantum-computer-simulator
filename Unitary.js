@@ -1,12 +1,33 @@
 class Unitary {
-    constructor(theta, phi, lambda) {
+    constructor(theta, phi, lambda) { //theta, phi, or lambda might be functions whose inputs are defined later, in that case, they are written as [inputIndex, function]
         this.original = {}
         this.modified = {}
+
+        this.modifiers = []
+
+        this.theta = theta; this.phi = phi; this.lambda = lambda
+
+        this.previousParameters = undefined // keeps track of the parameters to this unitary the last time it was called. if it's the same as last time, less work needs to be done when applying
+
+        // some unitaries have only one row filled in for each real and imaginary, but im ignoring that potential speed up
+    }
+
+    getOriginalMatrix(inputs) {
+
+        let theta, phi, lambda
+
+        if (typeof (this.theta) == "number") { theta = this.theta }
+        else { theta = this.theta[1](inputs[this.theta[0]]) } //this.theta[1] is a function, and it takes as an input the value at index this.theta[0]
+
+        if (typeof (this.phi) == "number") { phi = this.phi }
+        else { phi = this.phi[1](inputs[this.phi[0]]) }
+
+        if (typeof (this.lambda) == "number") { lambda = this.lambda }
+        else { lambda = this.lambda[1](inputs[this.lambda[0]]) }
 
         const sinTheta2 = Math.sin(theta / 2)
         const cosTheta2 = Math.cos(theta / 2)
 
-        //! this is wrong
         this.original.real = [
             [
                 correct0Precision(cosTheta2),
@@ -35,7 +56,6 @@ class Unitary {
             ||
             ((!equals0(this.original.real[1][0]) || !equals0(this.original.imag[1][0])) && (!equals0(this.original.real[1][1]) || !equals0(this.original.imag[1][1])))
 
-        // some unitaries have only one row filled in for each real and imaginary, but im ignoring that potential speed up
     }
 
     modify(modifier) {
@@ -43,7 +63,10 @@ class Unitary {
     }
 
     // applies the power and inverse modifiers to this.original to get this.modified
-    getModifiedMatrix() {
+    getModifiedMatrix(inputs) {
+        // first get the original matrix taking into account the inputs
+        this.getOriginalMatrix(inputs)
+
         let exponent = 1
         for (let i = 0; i < this.modifiers.length; i++) {
             if (this.modifiers[i].type == "power") {
@@ -149,7 +172,6 @@ class Unitary {
         // finding a solution for B1 and B2
 
         function getNullSolutions(Mr, Mi) {
-            // debugger
             if (Mr[0][0] == 0 && Mi[0][0] == 0) {
                 if (Mr[1][0] == 0 && Mi[1][0] == 0) {
                     /*
@@ -279,23 +301,25 @@ class Unitary {
         this.modified.imag = A_K_i
     }
 
-    async getGateMatrix(numQbits, controlQbits, qbitApplied) { // controlQbits match the order of the modifiers added, where the last modifier added will correspond to the last entry in controlQbits
-        this.getModifiedMatrix()
+    async getGateMatrix(numQbits, inputs) { // controlQbits match the order of the modifiers added, where the last modifier added will correspond to the last entry in controlQbits
+        console.log("getting new gate matrix")
+
+        this.getModifiedMatrix(inputs)
 
         let controls = []
 
         let j = 0
         for (let i = 0; i < this.modifiers.length; i++) {
             if (this.modifiers[i].type == "control") {
-                controls.push([controlQbits[j], "pos"])
+                controls.push("pos")
                 j++
             }
             else if (this.modifiers[i].type == "negativeControl") {
-                controls.push([controlQbits[j], "neg"])
+                controls.push("neg")
                 j++
             }
         }
-        const G = new GateMatrix(this, numQbits, controls, qbitApplied)
+        const G = new GateMatrix(this, numQbits, controls)
         await G.create()
 
         this.gateMatrix = G
@@ -303,8 +327,11 @@ class Unitary {
     }
 
     // applying the gate to the State
-    async apply(state, controlQbits, qbitApplied) {
-        await this.getGateMatrix(state.numQbits, controlQbits, qbitApplied)
+    async apply(state, controlQbits, qbitApplied, inputs) {
+        // if the gate matrix hasnt been updated to the most recent parameters, we need to redefine it
+        if (!this.gateMatrixUpToDate(state.numQbits, inputs)) {
+            await this.getGateMatrix(state.numQbits, inputs)
+        }
 
         // the gate matrix is assuming that all the controls are first (starting with most recently applied), then the modified unitary matrix, then nothing on the rest
         // we need to swap the bit order to match this, apply the gate, then swap back
@@ -321,7 +348,6 @@ class Unitary {
 
         let inverseSwaps = []
         for (let i = 0; i < qbitsCurrentLocations.length; i++) {
-            // console.log(qbitsCurrentLocations, qbitsTargetLocations)
             if (qbitsCurrentLocations[i] !== qbitsTargetLocations[i]) {
                 inverseSwaps.push([qbitsCurrentLocations[i], qbitsTargetLocations[i]])
 
@@ -422,5 +448,27 @@ class Unitary {
         state.vector = newVector
 
         await state.swap(inverseSwaps)
+    }
+
+    // checks if the current gate matrix has the same parameters as the current application call
+    gateMatrixUpToDate(numQbits, inputs) {
+        if (this.previousParameters == undefined) {
+            this.previousParameters = { numQbits, inputs }
+            return false
+        }
+
+        let inputsMatch = true
+        for (let i = 0; i < inputs.length; i++) {
+            if (this.previousParameters.inputs[i] !== inputs[i]) { inputsMatch = false; break }
+        }
+
+        let upToDate =
+            this.previousParameters.numQbits == numQbits
+            &&
+            inputsMatch
+
+        this.previousParameters = { numQbits, inputs }
+
+        return upToDate
     }
 }

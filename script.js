@@ -27,13 +27,19 @@ async function main() {
 
     const X = new Unitary(Math.PI, 0, Math.PI)
     const H = new Unitary(Math.PI / 2, 0, 0)
+    const RY = new Unitary([0, function (v) { return v }], 0, 0)
 
-    const p = new GPhase(Math.PI/2)
-    p.modify(new Modifier("power", 4))
+    // const p = new GPhase(Math.PI/2)
+    // p.modify(new Modifier("power", 4))
 
+    // await X.apply(state, [], 0)
     // await X.apply(state, [], 1)
-    await H.apply(state, [], 0)
-    await p.apply(state, [])
+    // await X.apply(state, [], 2)
+
+    // await RY.apply(state, [], 0, [Math.PI/2])
+    // await RY.apply(state, [], 1, [Math.PI/2])
+
+    // await p.apply(state, [])
 
     console.log(await readState(state))
 }

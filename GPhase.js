@@ -2,6 +2,7 @@ class GPhase {
     constructor(phase) {
         this.phase = phase
         this.modifiers = []
+        this.previousNumQbits = undefined
     }
 
     modify(modifier) {
@@ -113,7 +114,11 @@ class GPhase {
     }
 
     async apply(state, controlQbits) {
-        await this.getGateMatrix(state.numQbits)
+        // if the gateMatrix is out of date from the number of qbits its affecting, create a new one
+        if(this.previousNumQbits !== state.numQbits) {
+            await this.getGateMatrix(state.numQbits)
+            this.previousNumQbits = state.numQbits
+        }
 
         // we need to take into account the non-control modifiers in how this gate is changing the phase
         let phaseChange = this.phase
