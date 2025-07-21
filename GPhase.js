@@ -171,8 +171,8 @@ class GPhase {
         const workgroupsPerDimension = Math.ceil(Math.sqrt(2 ** state.numQbits))
 
         // gphase doesnt have a matrix like a unitary, but let's just fill it with the multiplier for phase and it will work
-        const phaseMultReal = Math.cos(phaseChange)
-        const phaseMultImag = Math.sin(phaseChange)
+        const phaseMultReal = cos(phaseChange)
+        const phaseMultImag = sin(phaseChange)
 
         const matrixEntriesCode = `
         const matrixEntriesReal = vec4f(${phaseMultReal}, ${phaseMultReal}, ${phaseMultReal}, ${phaseMultReal});

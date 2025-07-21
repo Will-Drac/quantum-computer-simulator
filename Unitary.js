@@ -28,27 +28,27 @@ class Unitary {
         if (typeof (this.lambda) == "number") { lambda = this.lambda }
         else { lambda = this.lambda[1](inputs[this.lambda[0]]) }
 
-        const sinTheta2 = Math.sin(theta / 2)
-        const cosTheta2 = Math.cos(theta / 2)
+        const sinTheta2 = sin(theta / 2)
+        const cosTheta2 = cos(theta / 2)
 
         this.original.real = [
             [
                 correct0Precision(cosTheta2),
-                correct0Precision(-Math.cos(lambda) * sinTheta2)
+                correct0Precision(-cos(lambda) * sinTheta2)
             ],
             [
-                correct0Precision(Math.cos(phi) * sinTheta2),
-                correct0Precision(Math.cos(phi + lambda) * cosTheta2)
+                correct0Precision(cos(phi) * sinTheta2),
+                correct0Precision(cos(phi + lambda) * cosTheta2)
             ]
         ]
         this.original.imag = [
             [
                 0,
-                correct0Precision(-Math.sin(lambda) * sinTheta2)
+                correct0Precision(-sin(lambda) * sinTheta2)
             ],
             [
-                correct0Precision(Math.sin(phi) * sinTheta2),
-                correct0Precision(Math.sin(phi + lambda) * cosTheta2)
+                correct0Precision(sin(phi) * sinTheta2),
+                correct0Precision(sin(phi + lambda) * cosTheta2)
             ]
         ]
 
@@ -139,11 +139,11 @@ class Unitary {
         const theta2 = Math.atan2(lambda2i, lambda2r)
 
         // then exponentiate and convert back to components
-        const lambda1kr = r1 ** exponent * Math.cos(exponent * theta1)
-        const lambda1ki = r1 ** exponent * Math.sin(exponent * theta1)
+        const lambda1kr = r1 ** exponent * cos(exponent * theta1)
+        const lambda1ki = r1 ** exponent * sin(exponent * theta1)
 
-        const lambda2kr = r2 ** exponent * Math.cos(exponent * theta2)
-        const lambda2ki = r2 ** exponent * Math.sin(exponent * theta2)
+        const lambda2kr = r2 ** exponent * cos(exponent * theta2)
+        const lambda2ki = r2 ** exponent * sin(exponent * theta2)
 
         // finding eigenvectors
         // solutions to (A - lambda I) v = 0  let B = (A - lambda I) for both lambda

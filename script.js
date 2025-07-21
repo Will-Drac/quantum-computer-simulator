@@ -1,3 +1,23 @@
+const pi = Math.PI
+
+// sin and cos have some precision issues, so i'm manually correcting them at some important angles
+function sin(theta) {
+    switch (theta) {
+        case pi / 6:
+            return 0.5
+        case pi / 4:
+            return Math.SQRT1_2
+        case pi:
+            return 0
+        default:
+            return Math.sin(theta)
+    }
+}
+
+function cos(theta) {
+    return sin(theta + Math.PI / 2)
+}
+
 let adapter, device
 
 async function loadWGSL(url) {
@@ -33,14 +53,14 @@ async function main() {
     const CRY = new Gate([new GateComponent(RY, [new Modifier("control")])])
     const CRY4 = new Gate([new GateComponent(CRY, [new Modifier("power", 4)])])
 
-    const PHASE = new GPhase([0, function(phase){return phase}])
+    const PHASE = new GPhase([0, function (phase) { return phase }])
 
     const CPHASE = new Gate([new GateComponent(PHASE, [new Modifier("negativeControl")])])
 
     await X.apply(state, [], 1, [], [])
     // await CPHASE.apply(state, [1], [], [Math.PI/2], [])
     // await PHASE.apply(state, [], [Math.PI/2], [])
-    await PHASE.apply(state, [1], [Math.PI/2], [new Modifier("negativeControl")])
+    await PHASE.apply(state, [1], [Math.PI / 2], [new Modifier("negativeControl")])
 
     console.log(await readGateMatrix(PHASE.gateMatrix))
 
@@ -166,5 +186,3 @@ async function readState(state) {
 
     return { real: resultReal, imag: resultImag, prob: resultProb }
 }
-
-// to test: negative powers on gates, gates run with a bunch of modifiers, multiple components in a gate which then gets controlled, gphase in gate
