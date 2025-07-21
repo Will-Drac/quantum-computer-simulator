@@ -3,11 +3,15 @@ class Unitary {
         this.original = {}
         this.modified = {}
 
-        this.modifiers = []
-
         this.theta = theta; this.phi = phi; this.lambda = lambda
 
         this.previousParameters = undefined // keeps track of the parameters to this unitary the last time it was called. if it's the same as last time, less work needs to be done when applying
+
+        this.numQbitsApplied = 1
+        this.numInputs = 0
+        if (typeof (this.theta) !== "number") { this.numInputs++ } //it takes in an input if it's not a number
+        if (typeof (this.phi) !== "number") { this.numInputs++ }
+        if (typeof (this.lambda) !== "number") { this.numInputs++ }
 
         // some unitaries have only one row filled in for each real and imaginary, but im ignoring that potential speed up
     }
@@ -48,8 +52,6 @@ class Unitary {
             ]
         ]
 
-        this.modifiers = [] //stores a list of Modifiers
-
         this.original.has2ColPerRow =
             ((!equals0(this.original.real[0][0]) || !equals0(this.original.imag[0][0])) && (!equals0(this.original.real[0][1]) || !equals0(this.original.imag[0][1])))
             ||
@@ -57,16 +59,10 @@ class Unitary {
 
     }
 
-    modify(modifier) {
-        this.modifiers.push(modifier)
-    }
-
     // applies the power and inverse modifiers to this.original to get this.modified
-    getModifiedMatrix(inputs, temporaryModifiers) {
+    getModifiedMatrix(inputs, modifiers) {
         // first get the original matrix taking into account the inputs
         this.getOriginalMatrix(inputs)
-
-        const modifiers = this.modifiers.concat(temporaryModifiers)
 
         let exponent = 1
         for (let i = 0; i < modifiers.length; i++) {
@@ -302,14 +298,12 @@ class Unitary {
         this.modified.imag = A_K_i
     }
 
-    async getGateMatrix(numQbits, inputs, temporaryModifiers) { // controlQbits match the order of the modifiers added, where the last modifier added will correspond to the last entry in controlQbits
+    async getGateMatrix(numQbits, inputs, modifiers) { // controlQbits match the order of the modifiers added, where the last modifier added will correspond to the last entry in controlQbits
         console.log("getting new gate matrix")
 
-        this.getModifiedMatrix(inputs, temporaryModifiers)
+        this.getModifiedMatrix(inputs, modifiers)
 
         let controls = []
-
-        const modifiers = this.modifiers.concat(temporaryModifiers)
 
         let j = 0
         for (let i = 0; i < modifiers.length; i++) {
@@ -330,10 +324,10 @@ class Unitary {
     }
 
     // applying the gate to the State
-    async apply(state, controlQbits, qbitApplied, inputs, temporaryModifiers) { //temporaryModifiers is used for modifiers applied outside of a gate definition. these modifiers are only used in the Unitary for this one application
+    async apply(state, controlQbits, qbitApplied, inputs, modifiers) { //temporaryModifiers is used for modifiers applied outside of a gate definition. these modifiers are only used in the Unitary for this one application
         // if the gate matrix hasnt been updated to the most recent parameters, we need to redefine it
-        if (!this.gateMatrixUpToDate(state.numQbits, inputs, temporaryModifiers)) {
-            await this.getGateMatrix(state.numQbits, inputs, temporaryModifiers)
+        if (!this.gateMatrixUpToDate(state.numQbits, inputs, modifiers)) {
+            await this.getGateMatrix(state.numQbits, inputs, modifiers)
         }
 
         // the gate matrix is assuming that all the controls are first (starting with most recently applied), then the modified unitary matrix, then nothing on the rest
@@ -454,19 +448,19 @@ class Unitary {
     }
 
     // checks if the current gate matrix has the same parameters as the current application call
-    gateMatrixUpToDate(numQbits, inputs, temporaryModifiers) {
+    gateMatrixUpToDate(numQbits, inputs, modifiers) {
         if (this.previousParameters == undefined) {
-            this.previousParameters = { numQbits, inputs, temporaryModifiers }
+            this.previousParameters = { numQbits, inputs, temporaryModifiers: modifiers }
             return false
         }
 
         let temporaryModifiersMatch = true
-        if (this.previousParameters.temporaryModifiers.length == temporaryModifiers.length) {
-            for (let i = 0; i < temporaryModifiers.length; i++) {
+        if (this.previousParameters.temporaryModifiers.length == modifiers.length) {
+            for (let i = 0; i < modifiers.length; i++) {
                 if (
-                    this.previousParameters.temporaryModifiers[i].type !== temporaryModifiers[i].type
+                    this.previousParameters.temporaryModifiers[i].type !== modifiers[i].type
                     ||
-                    this.previousParameters.temporaryModifiers[i].value !== temporaryModifiers[i].value
+                    this.previousParameters.temporaryModifiers[i].value !== modifiers[i].value
                 ) {
                     temporaryModifiersMatch = false
                     break
@@ -489,7 +483,7 @@ class Unitary {
             &&
             temporaryModifiersMatch
 
-        this.previousParameters = { numQbits, inputs, temporaryModifiers }
+        this.previousParameters = { numQbits, inputs, temporaryModifiers: modifiers }
 
         return upToDate
     }

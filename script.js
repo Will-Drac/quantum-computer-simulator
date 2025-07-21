@@ -23,28 +23,26 @@ async function main() {
     // !max column that can be stored is 2^30, so max 30 qbits
     console.log(`${Math.floor(Math.log2(maxStorageBufferBindingSize / 4))} qbits are possible on this device`)
 
-    let state = new State(3)
+    let state = new State(2)
 
     const X = new Unitary(Math.PI, 0, Math.PI)
     const H = new Unitary(Math.PI / 2, 0, 0)
     const RY = new Unitary([0, function (v) { return v }], 0, 0)
 
-    // const p = new GPhase(Math.PI/2)
-    // p.modify(new Modifier("power", 4))
+    const CX = new Gate([new GateComponent(X, [new Modifier("control")])])
+    const CRY = new Gate([new GateComponent(RY, [new Modifier("control")])])
+    const CRY4 = new Gate([new GateComponent(CRY, [new Modifier("power", 4)])])
 
-    // await X.apply(state, [], 0)
-    // await X.apply(state, [], 1)
-    // await X.apply(state, [], 2)
+    const PHASE = new GPhase([0, function(phase){return phase}])
 
-    // await RY.apply(state, [], 0, [Math.PI/2])
-    // await RY.apply(state, [], 1, [Math.PI/2])
+    const CPHASE = new Gate([new GateComponent(PHASE, [new Modifier("negativeControl")])])
 
-    // await p.apply(state, [])
+    await X.apply(state, [], 1, [], [])
+    // await CPHASE.apply(state, [1], [], [Math.PI/2], [])
+    // await PHASE.apply(state, [], [Math.PI/2], [])
+    await PHASE.apply(state, [1], [Math.PI/2], [new Modifier("negativeControl")])
 
-    await X.apply(state, [1], 0, [], [new Modifier("negativeControl")])
-    await X.apply(state, [0], 1, [], [new Modifier("control")])
-    await X.apply(state, [], 2, [], [])
-    await X.apply(state, [], 0, [], [new Modifier("power", 2)])
+    console.log(await readGateMatrix(PHASE.gateMatrix))
 
     console.log(await readState(state))
 }
@@ -168,3 +166,5 @@ async function readState(state) {
 
     return { real: resultReal, imag: resultImag, prob: resultProb }
 }
+
+// to test: negative powers on gates, gates run with a bunch of modifiers, multiple components in a gate which then gets controlled, gphase in gate

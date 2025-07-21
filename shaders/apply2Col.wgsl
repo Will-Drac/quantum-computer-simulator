@@ -43,7 +43,7 @@ const size = _SIZE;
         let data1 = matrixCol1[row];
         // extracting information out of the 32 bits
         let is11 = (data1 >> 31) == 1;
-        let matrixEntriesRow1 = (data1 >> 30) & 0x2;
+        let matrixEntriesRow1 = (data1 >> 30) & 0x1;
         let column1 = data1 & 0x3FFFFFFF;
 
         var val1Real: f32 = 0;
