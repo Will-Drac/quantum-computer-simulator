@@ -15,7 +15,7 @@ function sin(theta) {
 }
 
 function cos(theta) {
-    return sin(theta + Math.PI / 2)
+    return sin(theta + pi / 2)
 }
 
 let adapter, device
@@ -41,13 +41,17 @@ async function main() {
     }
 
     // !max column that can be stored is 2^30, so max 30 qbits
-    console.log(`${Math.floor(Math.log2(maxStorageBufferBindingSize / 4))} qbits are possible on this device`)
+    console.log(`${Math.floor(Math.log2(maxStorageBufferBindingSize / 4))} entangled qbits are possible on this device`)
 
-    let state = new State(2)
 
-    const X = new Unitary(Math.PI, 0, Math.PI)
-    const H = new Unitary(Math.PI / 2, 0, 0)
+    const numQbits = 3
+
+    let state = new State(numQbits)
+
+    const X = new Unitary(pi, 0, pi)
+    const H = new Unitary(pi / 2, 0, 0)
     const RY = new Unitary([0, function (v) { return v }], 0, 0)
+    const RZ = new Unitary(0, [0, function(v){return v}], 0)
 
     const CX = new Gate([new GateComponent(X, [new Modifier("control")])])
     const CRY = new Gate([new GateComponent(RY, [new Modifier("control")])])
@@ -57,13 +61,20 @@ async function main() {
 
     const CPHASE = new Gate([new GateComponent(PHASE, [new Modifier("negativeControl")])])
 
-    await X.apply(state, [], 1, [], [])
-    // await CPHASE.apply(state, [1], [], [Math.PI/2], [])
-    // await PHASE.apply(state, [], [Math.PI/2], [])
-    await PHASE.apply(state, [1], [Math.PI / 2], [new Modifier("negativeControl")])
+    // for (let i = 0; i < numQbits; i+=2) {
+    //     await H.apply(state, [], i, [], [])
+    //     await CX.apply(state, [i], [i+1], [], [])
+    // }
 
-    console.log(await readGateMatrix(PHASE.gateMatrix))
+    await RY.apply(state, [], 1, [pi/3], [])
 
+    // let measurements = []
+    // for (let i = 0; i < numQbits; i++) {
+    //     measurements.push(await state.measure(i))
+    // }
+    // console.log(measurements)
+
+    console.log(await state.measure(1))
     console.log(await readState(state))
 }
 main()
@@ -77,7 +88,84 @@ function correct0Precision(value) {
     return Math.abs(value) < 1e-10 ? 0 : value
 }
 
-// helper function
+async function sumBuffer(buffer) {
+    const numElements = buffer.size / 4
+
+    const rModule = device.createShaderModule({
+        code: await loadWGSL("shaders/reduce.wgsl")
+    })
+
+    const rPipeline = device.createComputePipeline({
+        layout: "auto",
+        compute: {
+            module: rModule
+        }
+    })
+
+    const workBuffer = device.createBuffer({
+        size: buffer.size,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+    })
+
+    const copyEncoder = device.createCommandEncoder()
+    copyEncoder.copyBufferToBuffer(
+        buffer, 0, workBuffer, 0, workBuffer.size
+    )
+    device.queue.submit([copyEncoder.finish()])
+
+    const rUniformBuffer = device.createBuffer({
+        size: 8,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    })
+
+    const rBindGroup = device.createBindGroup({
+        layout: rPipeline.getBindGroupLayout(0),
+        entries: [
+            { binding: 0, resource: { buffer: workBuffer } },
+            { binding: 1, resource: { buffer: rUniformBuffer } }
+        ]
+    })
+
+    const numSteps = Math.ceil(Math.log2(numElements))
+    for (let i = 0; i < numSteps; i++) {
+        const thisReduceEncoder = device.createCommandEncoder()
+        const thisPass = thisReduceEncoder.beginComputePass()
+
+        const stride = 2 ** i// a stride of 1 means no entries are skipped and each pair is added, so it takes rows/2 workgroups. if stride is 2, every second entry is ignored and it takes rows/4 workgroups
+        const workgroupsPerDimension = Math.ceil(Math.sqrt(numElements / (2 * stride)))
+
+        const rUniforms = new Uint32Array(2)
+        rUniforms.set([stride, workgroupsPerDimension])
+
+        device.queue.writeBuffer(rUniformBuffer, 0, rUniforms)
+
+        thisPass.setPipeline(rPipeline)
+        thisPass.setBindGroup(0, rBindGroup)
+        thisPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
+
+        thisPass.end()
+
+        device.queue.submit([thisReduceEncoder.finish()])
+    }
+
+    // now workBuffer has the probability of the selected qbit in its first entry
+    const readBuffer = device.createBuffer({
+        size: 4,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    })
+
+    const readEncoder = device.createCommandEncoder()
+    readEncoder.copyBufferToBuffer(
+        workBuffer, 0, readBuffer, 0, 4
+    )
+    device.queue.submit([readEncoder.finish()])
+
+    await readBuffer.mapAsync(GPUMapMode.READ)
+
+    return (new Float32Array(readBuffer.getMappedRange()))[0]
+}
+
+// helper function for debugging
 async function readGateMatrix(buffer) {
     const readBuffer = device.createBuffer({
         size: buffer.size,
