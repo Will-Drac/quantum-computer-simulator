@@ -122,7 +122,7 @@ class State {
     async getQbitProbability0(qbit) {
         await this.getProbabilities()
 
-        const numRows = 2 ** this.numQbits
+        const numRows = (2 ** this.numQbits) / 2 //removing half the probabilities
 
         // first, we remove all the probabilities of the states where the qbit isn't 0
         // then, we add up all the remaining probabilities using gpu reduction
@@ -142,7 +142,7 @@ class State {
         })
 
         const prunedBuffer = device.createBuffer({
-            size: this.probabilities.size,
+            size: this.probabilities.size / 2,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
         })
 
@@ -165,78 +165,7 @@ class State {
 
         // now doing the reduction
 
-        const rModule = device.createShaderModule({
-            code: await loadWGSL("shaders/reduceQbitProb.wgsl")
-        })
-
-        const rPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: {
-                module: rModule
-            }
-        })
-
-        const workBuffer = device.createBuffer({
-            size: prunedBuffer.size,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        })
-
-        const copyEncoder = device.createCommandEncoder()
-        copyEncoder.copyBufferToBuffer(
-            prunedBuffer, 0, workBuffer, 0, workBuffer.size
-        )
-        device.queue.submit([copyEncoder.finish()])
-
-        const rUniformBuffer = device.createBuffer({
-            size: 8,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-        })
-
-        const rBindGroup = device.createBindGroup({
-            layout: rPipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: workBuffer } },
-                { binding: 1, resource: { buffer: rUniformBuffer } }
-            ]
-        })
-
-        const numSteps = Math.ceil(Math.log2(numRows))
-        for (let i = 0; i < numSteps; i++) {
-            const thisReduceEncoder = device.createCommandEncoder()
-            const thisPass = thisReduceEncoder.beginComputePass()
-
-            const stride = 2 ** i// a stride of 1 means no entries are skipped and each pair is added, so it takes rows/2 workgroups. if stride is 2, every second entry is ignored and it takes rows/4 workgroups
-            const workgroupsPerDimension = Math.ceil(Math.sqrt(numRows / (2 * stride)))
-
-            const rUniforms = new Uint32Array(2)
-            rUniforms.set([stride, workgroupsPerDimension])
-
-            device.queue.writeBuffer(rUniformBuffer, 0, rUniforms)
-
-            thisPass.setPipeline(rPipeline)
-            thisPass.setBindGroup(0, rBindGroup)
-            thisPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
-
-            thisPass.end()
-
-            device.queue.submit([thisReduceEncoder.finish()])
-        }
-
-        // now workBuffer has the probability of the selected qbit in its first entry
-        const readBuffer = device.createBuffer({
-            size: 4,
-            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-        })
-
-        const readEncoder = device.createCommandEncoder()
-        readEncoder.copyBufferToBuffer(
-            workBuffer, 0, readBuffer, 0, 4
-        )
-        device.queue.submit([readEncoder.finish()])
-
-        await readBuffer.mapAsync(GPUMapMode.READ)
-
-        return (new Float32Array(readBuffer.getMappedRange()))[0]
+        return await sumBuffer(prunedBuffer)
     }
 
     // measures a qbit to 0 or 1 and collapses part of the state
@@ -288,8 +217,73 @@ class State {
 
         // if it was measured to be 1, flip the qbit to be 0
         if (measurementResult == 1) {
-            const X = new Unitary(Math.PI, Math.PI, 0)
+            const X = new Unitary(pi, pi, 0)
             await X.apply(this, [], qbit)
         }
+    }
+
+    // extracts all useful information of a single qbit in this state: bloch sphere position, phase, probability, purity of reduced state
+    async getQbitInfo(qbit) {
+        const prob0 = await this.getQbitProbability0(qbit)
+
+        // now, we need to get the coherence between |0> and |1>
+        // to do that, we calculate all the needed elements of the state's full density matrix, put them into a buffer, and do a gpu reduction to add them all up
+
+        const elementsWorkgroupsPerDimension = Math.ceil(Math.sqrt(2 ** (this.numQbits - 1)))
+
+        let eModule = device.createShaderModule({
+            code: (await loadWGSL("shaders/densityMatrixCoherenceElements.wgsl"))
+                .replace("_SIZE", 2 ** (this.numQbits - 1))
+                .replace("_WORKGROUPSPERDIM", elementsWorkgroupsPerDimension)
+                .replace("_QBIT", qbit)
+        })
+
+        const ePipeline = device.createComputePipeline({
+            layout: "auto",
+            compute: { module: eModule }
+        })
+
+        const elementsBufferReal = device.createBuffer({
+            size: 4 * 2 ** (this.numQbits - 1), //there will be half as many elements as entries in the state vector
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+        })
+        const elementsBufferImag = device.createBuffer({
+            size: 4 * 2 ** (this.numQbits - 1), //there will be half as many elements as entries in the state vector
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+        })
+
+        const eBindGroup = device.createBindGroup({
+            layout: ePipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: { buffer: this.vector.real } },
+                { binding: 1, resource: { buffer: this.vector.imag } },
+                { binding: 2, resource: { buffer: elementsBufferReal } },
+                { binding: 3, resource: { buffer: elementsBufferImag } },
+            ]
+        })
+
+        const eEncoder = device.createCommandEncoder()
+        const ePass = eEncoder.beginComputePass()
+        ePass.setPipeline(ePipeline)
+        ePass.setBindGroup(0, eBindGroup)
+        ePass.dispatchWorkgroups(elementsWorkgroupsPerDimension, elementsWorkgroupsPerDimension, 1)
+
+        ePass.end()
+        device.queue.submit([eEncoder.finish()])
+
+        // now the elements buffer needs to be summed down to one number
+        const coherence01 = { real: await sumBuffer(elementsBufferReal), imag: await sumBuffer(elementsBufferImag) }
+
+        // finally, we can get the bloch sphere position
+        const x = 2 * coherence01.real
+        const y = -2 * coherence01.imag
+        const z = 2 * prob0 - 1
+
+        const radius = Math.sqrt(x ** 2 + y ** 2 + z ** 2)
+        const phase = Math.atan2(y, x)
+
+        const probabilityAngle = Math.atan2(Math.sqrt(x * x + y * y), z)
+
+        return { position: { x, y, z }, radius, purity: 0.5 * (1 + radius ** 2), phase, probability0: prob0, probabilityAngle }
     }
 }

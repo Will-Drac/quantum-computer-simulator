@@ -3,23 +3,26 @@
 
 const workgroupsPerDimension = _WORKGROUPSPERDIM;
 const size = _SIZE;
-const qbit = _QBIT;
+const qbit: u32 = _QBIT;
 
-fn qbitIs0(value: u32) -> bool {
-    return ((value >> qbit) & 1u) == 1;
+fn powU(base: u32, exponent: u32) -> u32 {
+    var prod: u32 = 1;
+
+    for (var i: u32 = 0; i < exponent; i++) {
+        prod *= base;
+    }
+
+    return prod;
 }
 
 @compute @workgroup_size(1) fn pruneProbabilities(
     @builtin(global_invocation_id) id: vec3u
 ) {
-    let row = id.x * workgroupsPerDimension + id.y;
+    let newRow = id.x * workgroupsPerDimension + id.y;
 
-    if (row < size) {
-        if (qbitIs0(row)) {
-            probabilitiesPruned[row] = probabilities[row];
-        }
-        else {
-            probabilitiesPruned[row] = 0;
-        }
+    let oldRow = newRow % powU(2, qbit) + powU(2, qbit+1)*u32(f32(newRow)/f32(powU(2, qbit)));
+
+    if (newRow < size) {
+        probabilitiesPruned[newRow] = probabilities[oldRow];
     }
 }

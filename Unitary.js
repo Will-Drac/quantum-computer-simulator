@@ -299,8 +299,6 @@ class Unitary {
     }
 
     async getGateMatrix(numQbits, inputs, modifiers) { // controlQbits match the order of the modifiers added, where the last modifier added will correspond to the last entry in controlQbits
-        console.log("getting new gate matrix")
-
         this.getModifiedMatrix(inputs, modifiers)
 
         let controls = []

@@ -24,7 +24,7 @@ fn qbitIsRejected(value: u32) -> bool {
         }
         else {
             // we keep this entry but rescale it to account for the possibilities that were removed
-            let multiplier = 1 / sqrt(1-chanceOfMeasurementMade);
+            let multiplier = 1 / sqrt(chanceOfMeasurementMade);
             stateReal[row] = stateReal[row] * multiplier;
             stateImag[row] = stateImag[row] * multiplier;
         }
