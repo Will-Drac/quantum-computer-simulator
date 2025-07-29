@@ -378,21 +378,6 @@ class Unitary {
         const rowToCol = vec2u(${this.gateMatrix.row0Col}, ${this.gateMatrix.row1Col});
         `
 
-        const aModule = device.createShaderModule({
-            code: (await loadWGSL(this.modified.has2ColPerRow ? "shaders/apply2Col.wgsl" : "shaders/apply1Col.wgsl"))
-                .replace("_ENTRIES", matrixEntriesCode)
-                .replace("_ROWCOL", rowToColCode)
-                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
-                .replace("_SIZE", 2 ** state.numQbits)
-        })
-
-        const aPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: {
-                module: aModule
-            }
-        })
-
         const newVector = {
             real: device.createBuffer({
                 size: 4 * 2 ** state.numQbits,
@@ -426,19 +411,18 @@ class Unitary {
             ]
         }
 
-        const aBindGroup = device.createBindGroup({
-            layout: aPipeline.getBindGroupLayout(0),
-            entries: bindGroupEntries
-        })
+        runComputeShader(
+            (await loadWGSL(this.modified.has2ColPerRow ? "shaders/apply2Col.wgsl" : "shaders/apply1Col.wgsl"))
+                .replace("_ENTRIES", matrixEntriesCode)
+                .replace("_ROWCOL", rowToColCode)
+                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
+                .replace("_SIZE", 2 ** state.numQbits),
 
-        const aEncoder = device.createCommandEncoder()
-        const aPass = aEncoder.beginComputePass()
-        aPass.setPipeline(aPipeline)
-        aPass.setBindGroup(0, aBindGroup)
-        aPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
-        aPass.end()
+            bindGroupEntries,
 
-        device.queue.submit([aEncoder.finish()])
+            [workgroupsPerDimension, workgroupsPerDimension, 1]
+        )
+
 
         state.vector = newVector
 

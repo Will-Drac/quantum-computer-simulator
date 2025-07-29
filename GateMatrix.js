@@ -91,41 +91,25 @@ class GateMatrix {
         const newSize = oldSize * ISize
         const workgroupsPerDimension = Math.ceil(Math.sqrt(newSize))
 
-        const kiModule = device.createShaderModule({
-            code: (await loadWGSL(ISide == "left" ? "./shaders/kroneckerILeft.wgsl" : "./shaders/kroneckerIRight.wgsl"))
-                .replace("_ISIZE", ISize)
-                .replace("_OLDSIZE", oldSize)
-                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
-        })
-
-        const kiPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: {
-                module: kiModule
-            }
-        })
 
         const newEntries = device.createBuffer({
             size: 4 * newSize,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
         })
 
-        const kiBindGroup = device.createBindGroup({
-            layout: kiPipeline.getBindGroupLayout(0),
-            entries: [
+        runComputeShader(
+            (await loadWGSL(ISide == "left" ? "./shaders/kroneckerILeft.wgsl" : "./shaders/kroneckerIRight.wgsl"))
+                .replace("_ISIZE", ISize)
+                .replace("_OLDSIZE", oldSize)
+                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension),
+
+            [
                 { binding: 0, resource: { buffer: entries } },
                 { binding: 1, resource: { buffer: newEntries } }
-            ]
-        })
+            ],
 
-        const kiEncoder = device.createCommandEncoder()
-        const kiPass = kiEncoder.beginComputePass()
-        kiPass.setPipeline(kiPipeline)
-        kiPass.setBindGroup(0, kiBindGroup)
-        kiPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1) //in the shader we'll need to ignore the useless workgroups now
-        kiPass.end()
-
-        device.queue.submit([kiEncoder.finish()])
+            [workgroupsPerDimension, workgroupsPerDimension, 1]
+        )
 
         return newEntries
     }
@@ -135,41 +119,24 @@ class GateMatrix {
         const newSize = oldSize * 2
         const workgroupsPerDimension = Math.ceil(Math.sqrt(newSize))
 
-        const cModule = device.createShaderModule({
-            code: (await loadWGSL(type == "pos" ? "shaders/addControl.wgsl" : "shaders/addNegativeControl.wgsl"))
-                .replace("_SIZE", newSize)
-                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
-                .replace("_ISENTRIES0", isEntries0)
-        })
-
-        const cPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: {
-                module: cModule
-            }
-        })
-
         const newEntries = device.createBuffer({
             size: 4 * newSize,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
         })
 
-        const cBindGroup = device.createBindGroup({
-            layout: cPipeline.getBindGroupLayout(0),
-            entries: [
+        runComputeShader(
+            (await loadWGSL(type == "pos" ? "shaders/addControl.wgsl" : "shaders/addNegativeControl.wgsl"))
+                .replace("_SIZE", newSize)
+                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
+                .replace("_ISENTRIES0", isEntries0),
+
+            [
                 { binding: 0, resource: { buffer: entries } },
                 { binding: 1, resource: { buffer: newEntries } }
-            ]
-        })
+            ],
 
-        const cEncoder = device.createCommandEncoder()
-        const cPass = cEncoder.beginComputePass()
-        cPass.setPipeline(cPipeline)
-        cPass.setBindGroup(0, cBindGroup)
-        cPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
-        cPass.end()
-
-        device.queue.submit([cEncoder.finish()])
+            [workgroupsPerDimension, workgroupsPerDimension, 1]
+        )
 
         return newEntries
     }

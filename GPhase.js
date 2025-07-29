@@ -24,37 +24,20 @@ class GPhase {
 
         // first, add phase to all non-controlled qbits
 
-        const gModule = device.createShaderModule({
-            code: (await loadWGSL("shaders/gphase.wgsl"))
-                .replace("_SIZE", 2 ** numQbits)
-                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
-        })
-
-        const gPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: { module: gModule }
-        })
-
         this.gateMatrix = device.createBuffer({
             size: 4 * uncontrolledSize,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
         })
 
-        const gBindGroup = device.createBindGroup({
-            layout: gPipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: this.gateMatrix } }
-            ]
-        })
+        runComputeShader(
+            (await loadWGSL("shaders/gphase.wgsl"))
+                .replace("_SIZE", 2 ** numQbits)
+                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension),
 
-        const gEncoder = device.createCommandEncoder()
-        const gPass = gEncoder.beginComputePass()
-        gPass.setPipeline(gPipeline)
-        gPass.setBindGroup(0, gBindGroup)
-        gPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
-        gPass.end()
+            [{ binding: 0, resource: { buffer: this.gateMatrix } }],
 
-        device.queue.submit([gEncoder.finish()])
+            [workgroupsPerDimension, workgroupsPerDimension, 1]
+        )
 
         // now to add the controls
 
@@ -73,41 +56,24 @@ class GPhase {
         const newSize = oldSize * 2
         const workgroupsPerDimension = Math.ceil(Math.sqrt(newSize))
 
-        const cModule = device.createShaderModule({
-            code: (await loadWGSL(type == "pos" ? "shaders/addControl.wgsl" : "shaders/addNegativeControl.wgsl"))
-                .replace("_SIZE", newSize)
-                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
-                .replace("_ISENTRIES0", true) //there is only one entry buffer for a gphase
-        })
-
-        const cPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: {
-                module: cModule
-            }
-        })
-
         const newEntries = device.createBuffer({
             size: 4 * newSize,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
         })
 
-        const cBindGroup = device.createBindGroup({
-            layout: cPipeline.getBindGroupLayout(0),
-            entries: [
+        runComputeShader(
+            (await loadWGSL(type == "pos" ? "shaders/addControl.wgsl" : "shaders/addNegativeControl.wgsl"))
+                .replace("_SIZE", newSize)
+                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
+                .replace("_ISENTRIES0", true), //there is only one entry buffer for a gphase
+
+            [
                 { binding: 0, resource: { buffer: entries } },
                 { binding: 1, resource: { buffer: newEntries } }
-            ]
-        })
+            ],
 
-        const cEncoder = device.createCommandEncoder()
-        const cPass = cEncoder.beginComputePass()
-        cPass.setPipeline(cPipeline)
-        cPass.setBindGroup(0, cBindGroup)
-        cPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
-        cPass.end()
-
-        device.queue.submit([cEncoder.finish()])
+            [workgroupsPerDimension, workgroupsPerDimension, 1]
+        )
 
         return newEntries
     }
@@ -184,21 +150,6 @@ class GPhase {
         const rowToCol = vec2u(0, 0);
         `
 
-        const aModule = device.createShaderModule({
-            code: (await loadWGSL("shaders/apply1Col.wgsl"))
-                .replace("_ENTRIES", matrixEntriesCode)
-                .replace("_ROWCOL", rowToColCode)
-                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
-                .replace("_SIZE", 2 ** state.numQbits)
-        })
-
-        const aPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: {
-                module: aModule
-            }
-        })
-
         const newVector = {
             real: device.createBuffer({
                 size: 4 * 2 ** state.numQbits,
@@ -210,25 +161,23 @@ class GPhase {
             })
         }
 
-        const aBindGroup = device.createBindGroup({
-            layout: aPipeline.getBindGroupLayout(0),
-            entries: [
+        runComputeShader(
+            (await loadWGSL("shaders/apply1Col.wgsl"))
+                .replace("_ENTRIES", matrixEntriesCode)
+                .replace("_ROWCOL", rowToColCode)
+                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
+                .replace("_SIZE", 2 ** state.numQbits),
+
+            [
                 { binding: 0, resource: { buffer: this.gateMatrix } },
                 { binding: 1, resource: { buffer: state.vector.real } },
                 { binding: 2, resource: { buffer: state.vector.imag } },
                 { binding: 3, resource: { buffer: newVector.real } },
                 { binding: 4, resource: { buffer: newVector.imag } }
-            ]
-        })
+            ],
 
-        const aEncoder = device.createCommandEncoder()
-        const aPass = aEncoder.beginComputePass()
-        aPass.setPipeline(aPipeline)
-        aPass.setBindGroup(0, aBindGroup)
-        aPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
-        aPass.end()
-
-        device.queue.submit([aEncoder.finish()])
+            [workgroupsPerDimension, workgroupsPerDimension, 1]
+        )
 
         state.vector = newVector
 
