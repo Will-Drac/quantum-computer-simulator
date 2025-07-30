@@ -20,7 +20,9 @@ fn powU(base: u32, exponent: u32) -> u32 {
 ) {
     let newRow = id.x * workgroupsPerDimension + id.y;
 
-    let oldRow = newRow % powU(2, qbit) + powU(2, qbit+1)*u32(f32(newRow)/f32(powU(2, qbit)));
+    let twoQbit = powU(2, qbit);
+
+    let oldRow = newRow % twoQbit + 2*twoQbit * (newRow/twoQbit);
 
     if (newRow < size) {
         probabilitiesPruned[newRow] = probabilities[oldRow];

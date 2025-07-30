@@ -24,7 +24,7 @@ fn powU(base: u32, exponent: u32) -> u32 {
 
     if (n < size) {
         let twoQbit: u32 = powU(2, qbit);
-        let i = n%twoQbit + 2*twoQbit*u32(f32(n)/f32(twoQbit));
+        let i = n%twoQbit + 2*twoQbit * (n/twoQbit);
         let j = i + twoQbit;
 
         // this element is the entry of the state vector at i multiplied by the complex conjugate of the entry of the state vector at j

@@ -22,7 +22,7 @@ class Gate {
         this.numControls += component.getNumControls()
     }
 
-    async apply(state, controlQbits, qbitsApplied, inputs, modifiers) {
+    async applyComponents(state, controlQbits, qbitsApplied, inputs, modifiers) {
         // about modifiers:
         // remove all power and inverse modifiers and apply this gate multiple times or flip is components accordingly
         // pool together all controls and pass them down to the components as modifiers
@@ -71,67 +71,29 @@ class Gate {
                 }
                 if (applyingInverse) { cModifiers.push(new Modifier("inverse")) }
 
-                const type = c.constructor.name
 
-                if (type == "Gate") {
-                    let thisControlQbits = []
-                    for (let j = 0; j < cNumControls; j++) {
-                        thisControlQbits.push(controlQbits[currentControlsIndex])
-                        currentControlsIndex++
-                    }
-                    thisControlQbits = thisControlQbits.concat(passedDownQbits)
+                // getting all the inputs to this component and then applying it to the state
 
-                    let thisInputs = []
-                    for (let j = 0; j < c.numInputs; j++) {
-                        thisInputs.push(inputs[currentInputsIndex])
-                        currentInputsIndex++
-                    }
+                let thisControlQbits = []
+                for (let j = 0; j < cNumControls; j++) {
+                    thisControlQbits.push(controlQbits[currentControlsIndex])
+                    currentControlsIndex++
+                }
+                thisControlQbits = thisControlQbits.concat(passedDownQbits)
 
-                    let thisQbitsApplied = []
-                    for (let j = 0; j < c.numQbitsApplied; j++) {
-                        thisQbitsApplied.push(qbitsApplied[currentQbitsAppliedIndex])
-                        currentQbitsAppliedIndex++
-                    }
-
-                    await c.apply(state, thisControlQbits, thisQbitsApplied, thisInputs, cModifiers)
+                let thisInputs = []
+                for (let j = 0; j < c.numInputs; j++) {
+                    thisInputs.push(inputs[currentInputsIndex])
+                    currentInputsIndex++
                 }
 
-                else if (type == "Unitary") {
-                    let thisControlQbits = []
-                    for (let j = 0; j < cNumControls; j++) {
-                        thisControlQbits.push(controlQbits[currentControlsIndex])
-                        currentControlsIndex++
-                    }
-                    thisControlQbits= thisControlQbits.concat(passedDownQbits)
-
-                    let thisInputs = []
-                    for (let j = 0; j < c.numInputs; j++) {
-                        thisInputs.push(inputs[currentInputsIndex])
-                        currentInputsIndex++
-                    }
-
-                    const qbitApplied = qbitsApplied[currentQbitsAppliedIndex]
+                let thisQbitsApplied = []
+                for (let j = 0; j < c.numQbitsApplied; j++) {
+                    thisQbitsApplied.push(qbitsApplied[currentQbitsAppliedIndex])
                     currentQbitsAppliedIndex++
-
-                    await c.apply(state, thisControlQbits, qbitApplied, thisInputs, cModifiers)
                 }
 
-                else if (type == "GPhase") {
-                    let thisControlQbits = []
-                    for (let j = 0; j < cNumControls; j++) {
-                        thisControlQbits.push(controlQbits[currentControlsIndex])
-                        currentControlsIndex++
-                    }
-                    thisControlQbits= thisControlQbits.concat(passedDownQbits)
-
-                    let thisInputs = []
-                    for (let j = 0; j < c.numInputs; j++) {
-                        thisInputs.push(inputs[currentInputsIndex])
-                        currentInputsIndex++
-                    }
-
-                    await c.apply(state, thisControlQbits, thisInputs, cModifiers)
-                }
+                await state.apply(c, thisControlQbits, thisQbitsApplied, thisInputs, cModifiers)
             }
 
         }

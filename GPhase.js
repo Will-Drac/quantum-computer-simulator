@@ -8,7 +8,43 @@ class GPhase {
         if (typeof (this.phase) !== "number") { this.numInputs++ }
     }
 
-    async getGateMatrix(numQbits, modifiers) {
+    // GPhase doesnt have a matrix like a Unitary does, this is just for parity. GPhase will simply make all diagonals to be cosφ + isinφ
+    getModifiedMatrix(inputs, modifiers) {
+        let phaseChange
+        if (typeof (this.phase) == "number") { phaseChange = this.phase }
+        else { phaseChange = this.phase[1](inputs[this.phase[0]]) }
+
+        // we need to take into account the non-control modifiers in how this gate is changing the phase
+        for (let i = 0; i < modifiers.length; i++) {
+            if (modifiers[i].type == "power") {
+                phaseChange *= modifiers[i].value
+            }
+            else if (modifiers[i].type == "inverse") {
+                phaseChange *= -1
+            }
+        }
+
+        const cosPhase = cos(phaseChange)
+        const sinPhase = sin(phaseChange)
+
+        this.modified = {}
+
+        this.modified.real = [
+            [cosPhase, cosPhase],
+            [cosPhase, cosPhase]
+        ]
+
+        this.modified.imag = [
+            [sinPhase, sinPhase],
+            [sinPhase, sinPhase]
+        ]
+
+        this.modified.has2ColPerRow = false
+    }
+
+    async getGateMatrix(numQbits, inputs, modifiers) { //inputs aren't used here yet, 
+        this.getModifiedMatrix(inputs, modifiers)
+
         let numControls = 0
         for (let i = 0; i < modifiers.length; i++) {
             if (modifiers[i].type == "control" || modifiers[i].type == "negativeControl") {
@@ -24,17 +60,24 @@ class GPhase {
 
         // first, add phase to all non-controlled qbits
 
-        this.gateMatrix = device.createBuffer({
-            size: 4 * uncontrolledSize,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-        })
+        // it's defined in a weird way for parity with a Unitary, which needs a more sophisticated gateMatrix object
+        this.gateMatrix = {
+            entries: [
+                device.createBuffer({
+                    size: 4 * uncontrolledSize,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+                })
+            ],
+            row0Col: 0,
+            row1Col: 0
+        }
 
         runComputeShader(
             (await loadWGSL("shaders/gphase.wgsl"))
                 .replace("_SIZE", 2 ** numQbits)
                 .replace("_WORKGROUPSPERDIM", workgroupsPerDimension),
 
-            [{ binding: 0, resource: { buffer: this.gateMatrix } }],
+            [{ binding: 0, resource: { buffer: this.gateMatrix.entries[0] } }],
 
             [workgroupsPerDimension, workgroupsPerDimension, 1]
         )
@@ -43,10 +86,10 @@ class GPhase {
 
         for (let i = 0; i < modifiers.length; i++) {
             if (modifiers[i].type == "control") {
-                this.gateMatrix = await this.addControlGateMatrix("pos", this.gateMatrix)
+                this.gateMatrix = await this.addControlGateMatrix("pos", this.gateMatrix.entries[0])
             }
             else if (modifiers[i].type == "negativeControl") {
-                this.gateMatrix = await this.addControlGateMatrix("neg", this.gateMatrix)
+                this.gateMatrix = await this.addControlGateMatrix("neg", this.gateMatrix.entries[0])
             }
         }
     }
@@ -76,112 +119,6 @@ class GPhase {
         )
 
         return newEntries
-    }
-
-    async apply(state, controlQbits, inputs, modifiers) {
-
-        // if the gateMatrix is out of date from the number of qbits its affecting and the temporary modifiers, create a new one
-        if (!this.gateMatrixUpToDate(state.numQbits, inputs, modifiers)) {
-            await this.getGateMatrix(state.numQbits, modifiers)
-        }
-
-        // we need to take into account the non-control modifiers in how this gate is changing the phase
-        let phaseChange
-        if (typeof (this.phase) == "number") { phaseChange = this.phase }
-        else { phaseChange = this.phase[1](inputs[this.phase[0]]) }
-
-        for (let i = 0; i < modifiers.length; i++) {
-            if (modifiers[i].type == "power") {
-                phaseChange *= modifiers[i].value
-            }
-            else if (modifiers[i].type == "inverse") {
-                phaseChange *= -1
-            }
-        }
-
-        // now we're going to use apply1Col.wgsl to multiply gateMatrix with the state
-
-        // first, we need to swap qbits in the state because the controls are always being applied to just the first entries
-        let qbitsCurrentLocations = []
-        for (let i = 0; i < controlQbits.length; i++) {
-            qbitsCurrentLocations.push(controlQbits.length - i - 1)
-        }
-
-        let qbitsTargetLocations = controlQbits
-
-        let inverseSwaps = []
-        for (let i = 0; i < qbitsCurrentLocations.length; i++) {
-            if (qbitsCurrentLocations[i] !== qbitsTargetLocations[i]) {
-                inverseSwaps.push([qbitsCurrentLocations[i], qbitsTargetLocations[i]])
-
-                // if we happened to displace another important one, keep track of that
-                for (let j = 0; j < qbitsCurrentLocations.length; j++) {
-                    if (qbitsCurrentLocations[j] == qbitsTargetLocations[i]) {
-                        qbitsCurrentLocations[j] = qbitsCurrentLocations[i]
-                    }
-                }
-
-                qbitsCurrentLocations[i] = qbitsTargetLocations[i] //keep track of the intended switch too
-            }
-        }
-
-        let swaps = []
-        for (let i = inverseSwaps.length - 1; i >= 0; i--) {
-            swaps.push(inverseSwaps[i])
-        }
-
-        // after multiplying, we need to put the qbits back in order. that's what inverseSwaps is for
-
-        await state.swap(swaps)
-
-        const workgroupsPerDimension = Math.ceil(Math.sqrt(2 ** state.numQbits))
-
-        // gphase doesnt have a matrix like a unitary, but let's just fill it with the multiplier for phase and it will work
-        const phaseMultReal = cos(phaseChange)
-        const phaseMultImag = sin(phaseChange)
-
-        const matrixEntriesCode = `
-        const matrixEntriesReal = vec4f(${phaseMultReal}, ${phaseMultReal}, ${phaseMultReal}, ${phaseMultReal});
-        const matrixEntriesImag = vec4f(${phaseMultImag}, ${phaseMultImag}, ${phaseMultImag}, ${phaseMultImag});
-        `
-
-        // the matrix entries only actually contain references to row 0 when the entry isnt just the value 1, and the column doesnt matter because the entire matrix as defined above has the same value
-        const rowToColCode = `
-        const rowToCol = vec2u(0, 0);
-        `
-
-        const newVector = {
-            real: device.createBuffer({
-                size: 4 * 2 ** state.numQbits,
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-            }),
-            imag: device.createBuffer({
-                size: 4 * 2 ** state.numQbits,
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-            })
-        }
-
-        runComputeShader(
-            (await loadWGSL("shaders/apply1Col.wgsl"))
-                .replace("_ENTRIES", matrixEntriesCode)
-                .replace("_ROWCOL", rowToColCode)
-                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
-                .replace("_SIZE", 2 ** state.numQbits),
-
-            [
-                { binding: 0, resource: { buffer: this.gateMatrix } },
-                { binding: 1, resource: { buffer: state.vector.real } },
-                { binding: 2, resource: { buffer: state.vector.imag } },
-                { binding: 3, resource: { buffer: newVector.real } },
-                { binding: 4, resource: { buffer: newVector.imag } }
-            ],
-
-            [workgroupsPerDimension, workgroupsPerDimension, 1]
-        )
-
-        state.vector = newVector
-
-        await state.swap(inverseSwaps)
     }
 
     // checks if the current gate matrix has the same parameters as the current application call

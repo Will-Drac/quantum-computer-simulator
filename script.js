@@ -44,12 +44,12 @@ async function main() {
     console.log(`${Math.floor(Math.log2(maxStorageBufferBindingSize / 4))} entangled qbits are possible on this device`)
 
 
-    const numQbits = 3
+    const numQbits = 4
 
     let state = new State(numQbits)
 
     const X = new Unitary(pi, 0, pi)
-    const H = new Unitary(pi / 2, 0, 0)
+    const H = new Unitary(pi / 2, 0, pi)
     const RY = new Unitary([0, function (v) { return v }], 0, 0)
     const RZ = new Unitary(0, [0, function(v){return v}], 0)
 
@@ -61,21 +61,16 @@ async function main() {
 
     const CPHASE = new Gate([new GateComponent(PHASE, [new Modifier("negativeControl")])])
 
-    // for (let i = 0; i < numQbits; i+=2) {
-    //     await H.apply(state, [], i, [], [])
-    //     await CX.apply(state, [i], [i+1], [], [])
-    // }
+    await state.apply(RY, [], [0], [pi/4], [])
+    await state.apply(CX, [0], [2], [], [])
+    await state.apply(H, [], [0], [], [])
+    await state.apply(RY, [], [1], [pi/5], [])
+    await state.apply(CRY, [1], [3], [pi/3], [])
 
-    await RY.apply(state, [], 1, [pi/3], [])
+    console.log(await state.displayFullState())
 
-    // let measurements = []
-    // for (let i = 0; i < numQbits; i++) {
-    //     measurements.push(await state.measure(i))
-    // }
-    // console.log(measurements)
+    debugger
 
-    console.log(await state.measure(1))
-    console.log(await readState(state))
 }
 main()
 

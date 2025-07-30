@@ -1,289 +1,424 @@
 class State {
     constructor(numQbits) {
-        this.numQbits = numQbits
-        this.vector = {}
+        this.substates = []
 
-        // the vector will start off as [1, 0, 0, ...]
-        this.vector.real = device.createBuffer({
-            size: 4 * 2 ** numQbits,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-            mappedAtCreation: true
-        })
-        new Float32Array(this.vector.real.getMappedRange()).set(new Float32Array([1]))
-        this.vector.real.unmap()
-
-        this.vector.imag = device.createBuffer({
-            size: 4 * 2 ** numQbits,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-        })
-    }
-
-    async swap(qbitSwaps) { //qbitSwaps will hold a list of all swaps the make in order eg. [[0, 1], [0, 2]] 012 -> 201
-        if (qbitSwaps.length == 0) { return }
-
-        const size = this.vector.real.size
-        const workgroupsPerDimension = Math.ceil(Math.sqrt(size))
-
-        let swapCode = `const swaps: array<vec2u, ${qbitSwaps.length}> = array<vec2u, ${qbitSwaps.length}>(`
-        for (let i = 0; i < qbitSwaps.length; i++) {
-            swapCode += `vec2u(${qbitSwaps[i][0]}, ${qbitSwaps[i][1]}), `
+        for (let i = 0; i < numQbits; i++) {
+            this.substates.push(new Substate(1, [i]))
         }
-        swapCode += ");"
+    }
 
-        const sModule = device.createShaderModule({
-            code: (await loadWGSL("shaders/stateQbitSwap.wgsl"))
-                .replace("_SIZE", size)
-                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
-                .replace("_SWAPS", swapCode)
-                .replaceAll("_NUMSWAPS", qbitSwaps.length)
-        })
-
-        const sPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: {
-                module: sModule
+    getQbitFromSubstate(qbit) {
+        let substate, localQbitIndex
+        for (let i = 0; i < this.substates.length; i++) {
+            if (this.substates[i].qbitOrder.includes(qbit)) {
+                substate = this.substates[i]
+                localQbitIndex = substate.qbitOrder.indexOf(qbit)
             }
-        })
+        }
 
-        const newReal = device.createBuffer({
-            size: this.vector.real.size,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-        })
-        const newImag = device.createBuffer({
-            size: this.vector.imag.size,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-        })
-
-        const sBindGroup = device.createBindGroup({
-            layout: sPipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: this.vector.real } },
-                { binding: 1, resource: { buffer: this.vector.imag } },
-                { binding: 2, resource: { buffer: newReal } },
-                { binding: 3, resource: { buffer: newImag } },
-            ]
-        })
-
-        const sEncoder = device.createCommandEncoder()
-        const sPass = sEncoder.beginComputePass()
-        sPass.setPipeline(sPipeline)
-        sPass.setBindGroup(0, sBindGroup)
-        sPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
-        sPass.end()
-
-        device.queue.submit([sEncoder.finish()])
-
-        this.vector.real = newReal
-        this.vector.imag = newImag
+        return { substate, localQbitIndex }
     }
 
-    async getProbabilities() {
-        const size = this.vector.real.size
-        const workgroupsPerDimension = Math.ceil(Math.sqrt(size))
+    // combines the states containing the qbits into one substate
+    // returns the index of the substate that currently hold all the qbits
+    async combine(qbits) {
+        let substateIndicesToCombine = []
 
-        const pModule = device.createShaderModule({
-            code: (await loadWGSL("shaders/stateProbabilities.wgsl"))
-                .replace("_SIZE", size)
-                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
-        })
-
-        const pPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: {
-                module: pModule
+        for (let i = 0; i < qbits.length; i++) {
+            for (let j = 0; j < this.substates.length; j++) {
+                if (this.substates[j].qbitOrder.includes(qbits[i]) && !substateIndicesToCombine.includes(j)) {
+                    substateIndicesToCombine.push(j)
+                }
             }
-        })
+        }
 
-        this.probabilities = device.createBuffer({
-            size: this.vector.real.size,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        })
+        substateIndicesToCombine = substateIndicesToCombine.sort((a, b) => a - b) //sorts the indices smallest first
 
-        const pBindGroup = device.createBindGroup({
-            layout: pPipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: this.vector.real } },
-                { binding: 1, resource: { buffer: this.vector.imag } },
-                { binding: 2, resource: { buffer: this.probabilities } },
-            ]
-        })
+        // we're going to add all substates to combine into the first one in the list
+        const recipientSubstate = this.substates[substateIndicesToCombine[0]]
+        for (let i = 1; i < substateIndicesToCombine.length; i++) {
+            const combiningSubstate = this.substates[substateIndicesToCombine[i]]
 
-        const pEncoder = device.createCommandEncoder()
-        const pPass = pEncoder.beginComputePass()
-        pPass.setPipeline(pPipeline)
-        pPass.setBindGroup(0, pBindGroup)
-        pPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
-        pPass.end()
+            // im still not entirely sure that this makes the indices of the qbits match up from the array to the actual state vector
+            recipientSubstate.qbitOrder = recipientSubstate.qbitOrder.concat(combiningSubstate.qbitOrder)
+            recipientSubstate.numQbits += combiningSubstate.numQbits
+            recipientSubstate.vector = await kronecker(combiningSubstate.vector, recipientSubstate.vector)
+        }
 
-        device.queue.submit([pEncoder.finish()])
+        // now to remove the substates that just got combined in, going largest to smallest
+        for (let i = substateIndicesToCombine.length - 1; i > 0; i--) {
+            this.substates.splice(substateIndicesToCombine[i], 1)
+        }
+
+        return recipientSubstate
     }
 
-    // probability1 = 1-probability0
-    async getQbitProbability0(qbit) {
-        await this.getProbabilities()
+    // removes a qbit from one substate and puts it in its own
+    async separate(qbit) {
+        const q = this.getQbitFromSubstate(qbit)
+        const S = q.substate
 
-        const numRows = (2 ** this.numQbits) / 2 //removing half the probabilities
+        // first, we get the reduced density matrix of just the qbit to separate out of the state
+        const rho = await S.getQbitReducedDensityMatrix(q.localQbitIndex)
 
-        // first, we remove all the probabilities of the states where the qbit isn't 0
-        // then, we add up all the remaining probabilities using gpu reduction
+        // now we need to get the one non-zero eigenvalue of rho
+        // ! there's only supposed to be one non-zero eigenvalue as long as the qbit is not entangled, and i'm not sure [0] will always be the non-zero but it seems like it
+        const eigenvalueEigenvector = getEigenvaluesEigenvectors2x2(rho)[0]
+        const lambda = eigenvalueEigenvector.eigenvalue
+        const v = eigenvalueEigenvector.eigenvector
 
-        const pruneWorkgroupsPerDimension = Math.ceil(Math.sqrt(numRows))
+        const s = Math.sqrt(lambda.real)
 
-        const pModule = device.createShaderModule({
-            code: (await loadWGSL("shaders/pruneProbabilities.wgsl"))
-                .replace("_SIZE", numRows)
-                .replace("_WORKGROUPSPERDIM", pruneWorkgroupsPerDimension)
-                .replace("_QBIT", qbit)
-        })
+        // console.log(lambda)
 
-        const pPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: { module: pModule }
-        })
+        // now take the vector of this substate, and for each pair of pure states where all qbits are the same except for the one being separated, add together their values weighted by the amplitude of the separated qbit being the value it is in that state (what's stored in the eigenvector), that will be what's left after the separation. finally, dividing by s normalizes it
 
-        const prunedBuffer = device.createBuffer({
-            size: this.probabilities.size / 2,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-        })
+        const newVector = {
+            real: device.createBuffer({
+                size: S.vector.real.size / 2,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+            }),
+            imag: device.createBuffer({
+                size: S.vector.imag.size / 2,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+            })
+        }
 
-        const pBindGroup = device.createBindGroup({
-            layout: pPipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: this.probabilities } },
-                { binding: 1, resource: { buffer: prunedBuffer } }
-            ]
-        })
+        const newRows = 2 ** (S.numQbits - 1) //it will now have one less qbit
+        const workgroupsPerDimension = Math.ceil(Math.sqrt(newRows))
 
-        const pEncoder = device.createCommandEncoder()
-        const pPass = pEncoder.beginComputePass()
-        pPass.setPipeline(pPipeline)
-        pPass.setBindGroup(0, pBindGroup)
-        pPass.dispatchWorkgroups(pruneWorkgroupsPerDimension, pruneWorkgroupsPerDimension, 1)
+        // just doing a multiplication of a nx2 matrix and a 2x1 vector => new state vector with qbit removed
+        runComputeShader(
+            /*wgsl*/ `
+            @group(0) @binding(0) var<storage, read> stateReal: array<f32>;
+            @group(0) @binding(1) var<storage, read> stateImag: array<f32>;
 
-        pPass.end()
-        device.queue.submit([pEncoder.finish()])
+            @group(0) @binding(2) var<storage, read_write> newStateReal: array<f32>;
+            @group(0) @binding(3) var<storage, read_write> newStateImag: array<f32>;
 
-        // now doing the reduction
+            const eigenvectorReal = vec2f(${v.real[0]}, ${v.real[1]});
+            const eigenvectorImag = vec2f(${v.imag[0]}, ${v.imag[1]});
 
-        return await sumBuffer(prunedBuffer)
+            const twoQbit = ${Math.pow(2, qbit)};
+
+            @compute @workgroup_size(1) fn separateQbit(
+                @builtin(global_invocation_id) id: vec3u
+            ) {
+                let row = id.x * ${workgroupsPerDimension} + id.y;
+
+                if (row < ${newRows}) {
+                    let this0StateIndex = row%twoQbit + 2*twoQbit * (row/twoQbit);
+                    let this1StateIndex = this0StateIndex + twoQbit;
+
+                    let real0 = eigenvectorReal[0]*stateReal[this0StateIndex] - eigenvectorImag[0]*stateImag[this0StateIndex];
+                    let imag0 = eigenvectorReal[0]*stateImag[this0StateIndex] + eigenvectorImag[0]*stateReal[this0StateIndex];
+
+                    let real1 = eigenvectorReal[1]*stateReal[this1StateIndex] - eigenvectorImag[1]*stateImag[this1StateIndex];
+                    let imag1 = eigenvectorReal[1]*stateImag[this1StateIndex] + eigenvectorImag[1]*stateReal[this1StateIndex];
+
+                    newStateReal[row] = ${1 / s} * (real0 + real1);
+                    newStateImag[row] = ${1 / s} * (imag0 + imag1);
+                }
+            }
+            `,
+
+            [
+                { binding: 0, resource: { buffer: S.vector.real } },
+                { binding: 1, resource: { buffer: S.vector.imag } },
+                { binding: 2, resource: { buffer: newVector.real } },
+                { binding: 3, resource: { buffer: newVector.imag } }
+            ],
+
+            [workgroupsPerDimension, workgroupsPerDimension, 1]
+        )
+
+        // update the state vector and remove the qbit that was separated
+        S.vector = newVector
+        S.qbitOrder.splice(S.qbitOrder.indexOf(qbit), 1)
+        S.numQbits--
+
+        // create a new substate for the qbit
+        const separatedSubstate = new Substate(1, [qbit])
+
+        const newSeparatedVector = {
+            real: device.createBuffer({
+                size: 8,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+                mappedAtCreation: true
+            }),
+            imag: device.createBuffer({
+                size: 8,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+                mappedAtCreation: true
+            })
+        }
+
+        new Float32Array(newSeparatedVector.real.getMappedRange()).set(new Float32Array([v.real[0], v.real[1]]))
+        newSeparatedVector.real.unmap()
+
+        new Float32Array(newSeparatedVector.imag.getMappedRange()).set(new Float32Array([v.imag[0], v.imag[1]]))
+        newSeparatedVector.imag.unmap()
+
+        separatedSubstate.vector = newSeparatedVector
+
+        this.substates.push(separatedSubstate)
+
+        return separatedSubstate
     }
 
-    // measures a qbit to 0 or 1 and collapses part of the state
+    async apply(gateUnitaryOrGPhase, controlQbits, qbitsApplied, inputs, modifiers) {
+        const G = gateUnitaryOrGPhase
+        if (G.constructor.name == "Gate") {
+            await G.applyComponents(this, controlQbits, qbitsApplied, inputs, modifiers)
+        }
+        else { //it will be a Unitary or GPhase
+            // first, we need to combine all the substates which hold the affected qbits into one
+            const qbitsAffected = controlQbits.concat(qbitsApplied)
+            const substateApplying = await this.combine(qbitsAffected)
+
+            const qbitApplied = qbitsApplied[0] //if this is a unitary, there will be one qbit applied. if a GPhase, there will be none and this will be undefined
+
+            // then the qbits in the substate need to be swapped around so that all the controls are first (starting with most recently applied), then the applied qbit (if it's a Unitary), then no qbits affected for the rest of the substate
+            let qbitsCurrentLocations = [] //stores where the affected qbits are currently. the array is ordered so that the controls are first, in order of most recently applied first, then the applied qbit at the end of the array if it exists
+            for (let i = controlQbits.length - 1; i >= 0; i--) { //indexing is reversed so that the most recently applied control is first
+                qbitsCurrentLocations.push(substateApplying.qbitOrder.indexOf(controlQbits[i]))
+            }
+            if (G.constructor.name == "Unitary") { qbitsCurrentLocations.push(substateApplying.qbitOrder.indexOf(qbitApplied)) }
+
+            // we want to do swaps of qbit indices in the substate so that the new currentPosition of each affected qbit is equal to its index in the currentPositions array, then it will be in the correct order for a GateMatrix to be applied
+            let swaps = []
+            for (let i = 0; i < qbitsCurrentLocations.length; i++) {
+                if (qbitsCurrentLocations[i] !== i) {
+                    swaps.push([qbitsCurrentLocations[i], i])
+
+                    // if we happened to displace another affected qbit, keep track of that
+                    for (let j = 0; j < qbitsCurrentLocations.length; j++) {
+                        if (qbitsCurrentLocations[j] == i) {
+                            qbitsCurrentLocations[j] = i
+                            break
+                        }
+                    }
+                }
+            }
+
+            // finally, make the swaps in the substate
+            await substateApplying.swap(swaps)
+
+            // getting the GateMatrix to apply
+            if (!G.gateMatrixUpToDate(substateApplying.numQbits, inputs, modifiers)) {
+                await G.getGateMatrix(substateApplying.numQbits, inputs, modifiers)
+            }
+
+            // applying it
+            const substateRows = 2 ** substateApplying.numQbits
+            const workgroupsPerDimension = Math.ceil(Math.sqrt(substateRows))
+
+            const matrixEntriesCode = /*wgsl*/ `
+            const matrixEntriesReal = vec4f(${G.modified.real[0][0]}, ${G.modified.real[0][1]}, ${G.modified.real[1][0]}, ${G.modified.real[1][1]});
+            const matrixEntriesImag = vec4f(${G.modified.imag[0][0]}, ${G.modified.imag[0][1]}, ${G.modified.imag[1][0]}, ${G.modified.imag[1][1]});
+            `
+
+            // for when there's only 1 entries buffer representing either of the columns
+            const rowToColCode = /*wgsl*/ `
+            const rowToCol = vec2u(${G.gateMatrix.row0Col}, ${G.gateMatrix.row1Col});
+            `
+
+            const newStateVector = {
+                real: device.createBuffer({
+                    size: 4 * substateRows,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+                }),
+                imag: device.createBuffer({
+                    size: 4 * substateRows,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+                })
+            }
+
+            let bindGroupEntries
+
+            if (G.modified.has2ColPerRow) {
+                bindGroupEntries = [
+                    { binding: 0, resource: { buffer: G.gateMatrix.entries[0] } },
+                    { binding: 1, resource: { buffer: G.gateMatrix.entries[1] } }, //the entries from the second column
+                    { binding: 2, resource: { buffer: substateApplying.vector.real } },
+                    { binding: 3, resource: { buffer: substateApplying.vector.imag } },
+                    { binding: 4, resource: { buffer: newStateVector.real } },
+                    { binding: 5, resource: { buffer: newStateVector.imag } }
+                ]
+            }
+            else {
+                bindGroupEntries = [
+                    { binding: 0, resource: { buffer: G.gateMatrix.entries[0] } },
+                    { binding: 1, resource: { buffer: substateApplying.vector.real } },
+                    { binding: 2, resource: { buffer: substateApplying.vector.imag } },
+                    { binding: 3, resource: { buffer: newStateVector.real } },
+                    { binding: 4, resource: { buffer: newStateVector.imag } }
+                ]
+            }
+
+            runComputeShader(
+                (await loadWGSL(G.modified.has2ColPerRow ? "shaders/apply2Col.wgsl" : "shaders/apply1Col.wgsl"))
+                    .replace("_ENTRIES", matrixEntriesCode)
+                    .replace("_ROWCOL", rowToColCode)
+                    .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
+                    .replace("_SIZE", substateRows),
+
+                bindGroupEntries,
+
+                [workgroupsPerDimension, workgroupsPerDimension, 1]
+            )
+
+
+            substateApplying.vector = newStateVector
+        }
+    }
+
     async measure(qbit) {
-        const probabilityToMeasure0 = await this.getQbitProbability0(qbit)
-        const measurementResult = Math.random() < probabilityToMeasure0 ? 0 : 1
+        const q = this.getQbitFromSubstate(qbit)
+        const S = q.substate
 
-        // now to collapse
-        const numRows = 2 ** this.numQbits
-        const workgroupsPerDimension = Math.ceil(Math.sqrt(numRows))
+        const measurementResult = await S.measure(q.localQbitIndex)
 
-        const cModule = device.createShaderModule({
-            code: (await loadWGSL("shaders/collapseState.wgsl"))
-                .replace("_SIZE", numRows)
-                .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
-                .replace("_QBIT", qbit)
-                .replace("_MEASUREMENT", measurementResult)
-                .replace("_MEASUREMENTPROB", measurementResult == 0 ? probabilityToMeasure0 : 1 - probabilityToMeasure0)
-        })
-
-        const cPipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: { module: cModule }
-        })
-
-        const cBindGroup = device.createBindGroup({
-            layout: cPipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: this.vector.real } },
-                { binding: 1, resource: { buffer: this.vector.imag } }
-            ]
-        })
-
-        const cEncoder = device.createCommandEncoder()
-        const cPass = cEncoder.beginComputePass()
-
-        cPass.setPipeline(cPipeline)
-        cPass.setBindGroup(0, cBindGroup)
-        cPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
-
-        cPass.end()
-        device.queue.submit([cEncoder.finish()])
+        // now that this qbit has been measured, its entanglement has surely collapsed, and it can be separated from the rest of the substate
+        await this.separate(qbit)
 
         return measurementResult
     }
 
     async reset(qbit) {
-        const measurementResult = await this.measure(qbit)
+        const q = this.getQbitFromSubstate(qbit)
+        const S = q.substate
 
-        // if it was measured to be 1, flip the qbit to be 0
+        const measurementResult = await S.measure(q.localQbitIndex)
+
+        // if we measured a 1, flip it to be a 0
         if (measurementResult == 1) {
-            const X = new Unitary(pi, pi, 0)
-            await X.apply(this, [], qbit)
+            const X = new Unitary(pi, 0, pi)
+            await this.apply(X, [], [qbit], [], [])
         }
     }
 
-    // extracts all useful information of a single qbit in this state: bloch sphere position, phase, probability, purity of reduced state
     async getQbitInfo(qbit) {
-        const prob0 = await this.getQbitProbability0(qbit)
+        const q = this.getQbitFromSubstate(qbit)
+        const S = q.substate
 
-        // now, we need to get the coherence between |0> and |1>
-        // to do that, we calculate all the needed elements of the state's full density matrix, put them into a buffer, and do a gpu reduction to add them all up
-
-        const elementsWorkgroupsPerDimension = Math.ceil(Math.sqrt(2 ** (this.numQbits - 1)))
-
-        let eModule = device.createShaderModule({
-            code: (await loadWGSL("shaders/densityMatrixCoherenceElements.wgsl"))
-                .replace("_SIZE", 2 ** (this.numQbits - 1))
-                .replace("_WORKGROUPSPERDIM", elementsWorkgroupsPerDimension)
-                .replace("_QBIT", qbit)
-        })
-
-        const ePipeline = device.createComputePipeline({
-            layout: "auto",
-            compute: { module: eModule }
-        })
-
-        const elementsBufferReal = device.createBuffer({
-            size: 4 * 2 ** (this.numQbits - 1), //there will be half as many elements as entries in the state vector
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-        })
-        const elementsBufferImag = device.createBuffer({
-            size: 4 * 2 ** (this.numQbits - 1), //there will be half as many elements as entries in the state vector
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-        })
-
-        const eBindGroup = device.createBindGroup({
-            layout: ePipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: this.vector.real } },
-                { binding: 1, resource: { buffer: this.vector.imag } },
-                { binding: 2, resource: { buffer: elementsBufferReal } },
-                { binding: 3, resource: { buffer: elementsBufferImag } },
-            ]
-        })
-
-        const eEncoder = device.createCommandEncoder()
-        const ePass = eEncoder.beginComputePass()
-        ePass.setPipeline(ePipeline)
-        ePass.setBindGroup(0, eBindGroup)
-        ePass.dispatchWorkgroups(elementsWorkgroupsPerDimension, elementsWorkgroupsPerDimension, 1)
-
-        ePass.end()
-        device.queue.submit([eEncoder.finish()])
-
-        // now the elements buffer needs to be summed down to one number
-        const coherence01 = { real: await sumBuffer(elementsBufferReal), imag: await sumBuffer(elementsBufferImag) }
-
-        // finally, we can get the bloch sphere position
-        const x = 2 * coherence01.real
-        const y = -2 * coherence01.imag
-        const z = 2 * prob0 - 1
-
-        const radius = Math.sqrt(x ** 2 + y ** 2 + z ** 2)
-        const phase = Math.atan2(y, x)
-
-        const probabilityAngle = Math.atan2(Math.sqrt(x * x + y * y), z)
-
-        return { position: { x, y, z }, radius, purity: 0.5 * (1 + radius ** 2), phase, probability0: prob0, probabilityAngle }
+        return await S.getQbitInfo(q.localQbitIndex)
     }
+
+    // when seeing the results of a circuit, it will be helpful to see the entire state, meaning all substates need to be joined
+    async getFullStateVector() {
+
+        // first, we're going to copy the substate at index 0
+        const s0 = this.substates[0]
+
+        this.fullState = new Substate(s0.numQbits, s0.qbitOrder)
+        this.fullState.vector = { //replacing the vector with one which can be a destination for a copy
+            real: device.createBuffer({
+                size: this.fullState.vector.real.size,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+            }),
+            imag: device.createBuffer({
+                size: this.fullState.vector.imag.size,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+            })
+        }
+
+        const copyEncoder = device.createCommandEncoder()
+
+        copyEncoder.copyBufferToBuffer(
+            s0.vector.real, 0, this.fullState.vector.real, 0, s0.vector.real.size
+        )
+        copyEncoder.copyBufferToBuffer(
+            s0.vector.imag, 0, this.fullState.vector.imag, 0, s0.vector.imag.size
+        )
+
+        device.queue.submit([copyEncoder.finish()])
+
+        // then, add on all the other substates with a kronecker product
+        for (let i = 1; i < this.substates.length; i++) {
+            this.fullState.vector = await kronecker(this.substates[i].vector, this.fullState.vector)
+            this.fullState.qbitOrder = this.fullState.qbitOrder.concat(this.substates[i].qbitOrder)
+            this.fullState.numQbits += this.substates[i].numQbits
+        }
+
+        // finally, the qbit order is not going to be right, we need to sort it and make the necessary swaps
+
+        let o = [] //creating a copy of the qbit order to work on
+        for (let i = 0; i < this.fullState.qbitOrder.length; i++) {
+            o.push(this.fullState.qbitOrder[i])
+        }
+
+        let swaps = []
+        for (let i = 0; i < o.length; i++) {
+            if (o[i] !== i) { // if the qbit at position i is not qbit i
+                const currentPositionI = o.indexOf(i)
+                swaps.push([i, currentPositionI]) //swap this position with the position what qbit i is in
+
+                // then update the order to match
+                o[currentPositionI] = o[i]
+                o[i] = i
+            }
+        }
+
+        await this.fullState.swap(swaps)
+
+        return this.fullState
+    }
+
+    async displayFullState() {
+        return await readState(await this.getFullStateVector())
+    }
+}
+
+// a helper which does the math to combine two substate vectors
+async function kronecker(leftVector, rightVector) {
+    const newSize = (leftVector.real.size / 4) * (rightVector.real.size / 4)
+    const workgroupsPerDimension = Math.ceil(Math.sqrt(newSize))
+
+    const kModule = device.createShaderModule({
+        code: (await loadWGSL("shaders/kroneckerVector.wgsl"))
+            .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
+            .replace("_NEWSIZE", newSize)
+            .replace("_LEFTSIZE", leftVector.real.size / 4)
+            .replace("_RIGHTSIZE", rightVector.real.size / 4)
+    })
+
+    const kPipeline = device.createComputePipeline({
+        layout: "auto",
+        compute: { module: kModule }
+    })
+
+    const newVector = {}
+
+    newVector.real = device.createBuffer({
+        size: newSize * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+    })
+    newVector.imag = device.createBuffer({
+        size: newSize * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+    })
+
+    const kBindGroup = device.createBindGroup({
+        layout: kPipeline.getBindGroupLayout(0),
+        entries: [
+            { binding: 0, resource: { buffer: leftVector.real } },
+            { binding: 1, resource: { buffer: leftVector.imag } },
+            { binding: 2, resource: { buffer: rightVector.real } },
+            { binding: 3, resource: { buffer: rightVector.imag } },
+            { binding: 4, resource: { buffer: newVector.real } },
+            { binding: 5, resource: { buffer: newVector.imag } }
+        ]
+    })
+
+    const kEncoder = device.createCommandEncoder()
+    const kPass = kEncoder.beginComputePass()
+    kPass.setPipeline(kPipeline)
+    kPass.setBindGroup(0, kBindGroup)
+    kPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
+    kPass.end()
+
+    device.queue.submit([kEncoder.finish()])
+
+    return newVector
 }
