@@ -73,7 +73,7 @@ class GPhase {
         }
 
         runComputeShader(
-            (await loadWGSL("shaders/gphase.wgsl"))
+            (await loadWGSL("./simulator/shaders/gphase.wgsl"))
                 .replace("_SIZE", 2 ** numQbits)
                 .replace("_WORKGROUPSPERDIM", workgroupsPerDimension),
 
@@ -105,7 +105,7 @@ class GPhase {
         })
 
         runComputeShader(
-            (await loadWGSL(type == "pos" ? "shaders/addControl.wgsl" : "shaders/addNegativeControl.wgsl"))
+            (await loadWGSL(type == "pos" ? "./simulator/shaders/addControl.wgsl" : "./simulator/shaders/addNegativeControl.wgsl"))
                 .replace("_SIZE", newSize)
                 .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
                 .replace("_ISENTRIES0", true), //there is only one entry buffer for a gphase

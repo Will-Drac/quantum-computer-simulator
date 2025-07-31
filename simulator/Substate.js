@@ -44,7 +44,7 @@ class Substate {
         })
 
         runComputeShader(
-            (await loadWGSL("shaders/stateQbitSwap.wgsl"))
+            (await loadWGSL("./simulator/shaders/stateQbitSwap.wgsl"))
                 .replace("_SIZE", size)
                 .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
                 .replace("_SWAPS", swapCode)
@@ -84,7 +84,7 @@ class Substate {
         })
 
         runComputeShader(
-            (await loadWGSL("shaders/stateProbabilities.wgsl"))
+            (await loadWGSL("./simulator/shaders/stateProbabilities.wgsl"))
                 .replace("_SIZE", size)
                 .replace("_WORKGROUPSPERDIM", workgroupsPerDimension),
 
@@ -115,7 +115,7 @@ class Substate {
         })
 
         runComputeShader(
-            (await loadWGSL("shaders/pruneProbabilities.wgsl"))
+            (await loadWGSL("./simulator/shaders/pruneProbabilities.wgsl"))
                 .replace("_SIZE", numRows)
                 .replace("_WORKGROUPSPERDIM", pruneWorkgroupsPerDimension)
                 .replace("_QBIT", qbit),
@@ -143,7 +143,7 @@ class Substate {
         const workgroupsPerDimension = Math.ceil(Math.sqrt(numRows))
 
         runComputeShader(
-            (await loadWGSL("shaders/collapseState.wgsl"))
+            (await loadWGSL("./simulator/shaders/collapseState.wgsl"))
                 .replace("_SIZE", numRows)
                 .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
                 .replace("_QBIT", qbit)
@@ -180,7 +180,7 @@ class Substate {
         })
 
         runComputeShader(
-            (await loadWGSL("shaders/densityMatrixCoherenceElements.wgsl"))
+            (await loadWGSL("./simulator/shaders/densityMatrixCoherenceElements.wgsl"))
                 .replace("_SIZE", 2 ** (this.numQbits - 1))
                 .replace("_WORKGROUPSPERDIM", elementsWorkgroupsPerDimension)
                 .replace("_QBIT", qbit),

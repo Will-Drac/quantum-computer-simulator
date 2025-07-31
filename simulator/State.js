@@ -257,7 +257,7 @@ class State {
             }
 
             runComputeShader(
-                (await loadWGSL(G.modified.has2ColPerRow ? "shaders/apply2Col.wgsl" : "shaders/apply1Col.wgsl"))
+                (await loadWGSL(G.modified.has2ColPerRow ? "./simulator/shaders/apply2Col.wgsl" : "./simulator/shaders/apply1Col.wgsl"))
                     .replace("_ENTRIES", matrixEntriesCode)
                     .replace("_ROWCOL", rowToColCode)
                     .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
@@ -375,50 +375,36 @@ async function kronecker(leftVector, rightVector) {
     const newSize = (leftVector.real.size / 4) * (rightVector.real.size / 4)
     const workgroupsPerDimension = Math.ceil(Math.sqrt(newSize))
 
-    const kModule = device.createShaderModule({
-        code: (await loadWGSL("shaders/kroneckerVector.wgsl"))
+
+    const newVector = {
+        real: device.createBuffer({
+            size: newSize * 4,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+        }),
+        imag: device.createBuffer({
+            size: newSize * 4,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+        })
+    }
+
+    runComputeShader(
+        (await loadWGSL("./simulator/shaders/kroneckerVector.wgsl"))
             .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
             .replace("_NEWSIZE", newSize)
             .replace("_LEFTSIZE", leftVector.real.size / 4)
-            .replace("_RIGHTSIZE", rightVector.real.size / 4)
-    })
+            .replace("_RIGHTSIZE", rightVector.real.size / 4),
 
-    const kPipeline = device.createComputePipeline({
-        layout: "auto",
-        compute: { module: kModule }
-    })
-
-    const newVector = {}
-
-    newVector.real = device.createBuffer({
-        size: newSize * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-    })
-    newVector.imag = device.createBuffer({
-        size: newSize * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-    })
-
-    const kBindGroup = device.createBindGroup({
-        layout: kPipeline.getBindGroupLayout(0),
-        entries: [
+        [
             { binding: 0, resource: { buffer: leftVector.real } },
             { binding: 1, resource: { buffer: leftVector.imag } },
             { binding: 2, resource: { buffer: rightVector.real } },
             { binding: 3, resource: { buffer: rightVector.imag } },
             { binding: 4, resource: { buffer: newVector.real } },
             { binding: 5, resource: { buffer: newVector.imag } }
-        ]
-    })
+        ],
 
-    const kEncoder = device.createCommandEncoder()
-    const kPass = kEncoder.beginComputePass()
-    kPass.setPipeline(kPipeline)
-    kPass.setBindGroup(0, kBindGroup)
-    kPass.dispatchWorkgroups(workgroupsPerDimension, workgroupsPerDimension, 1)
-    kPass.end()
-
-    device.queue.submit([kEncoder.finish()])
+        [workgroupsPerDimension, workgroupsPerDimension, 1]
+    )
 
     return newVector
 }

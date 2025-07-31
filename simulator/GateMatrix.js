@@ -98,7 +98,7 @@ class GateMatrix {
         })
 
         runComputeShader(
-            (await loadWGSL(ISide == "left" ? "./shaders/kroneckerILeft.wgsl" : "./shaders/kroneckerIRight.wgsl"))
+            (await loadWGSL(ISide == "left" ? "./simulator/shaders/kroneckerILeft.wgsl" : "./simulator/shaders/kroneckerIRight.wgsl"))
                 .replace("_ISIZE", ISize)
                 .replace("_OLDSIZE", oldSize)
                 .replace("_WORKGROUPSPERDIM", workgroupsPerDimension),
@@ -125,7 +125,7 @@ class GateMatrix {
         })
 
         runComputeShader(
-            (await loadWGSL(type == "pos" ? "shaders/addControl.wgsl" : "shaders/addNegativeControl.wgsl"))
+            (await loadWGSL(type == "pos" ? "./simulator/shaders/addControl.wgsl" : "./simulator/shaders/addNegativeControl.wgsl"))
                 .replace("_SIZE", newSize)
                 .replace("_WORKGROUPSPERDIM", workgroupsPerDimension)
                 .replace("_ISENTRIES0", isEntries0),

@@ -87,7 +87,7 @@ async function sumBuffer(buffer) {
     const numElements = buffer.size / 4
 
     const rModule = device.createShaderModule({
-        code: await loadWGSL("shaders/reduce.wgsl")
+        code: await loadWGSL("./simulator/shaders/reduce.wgsl")
     })
 
     const rPipeline = device.createComputePipeline({
