@@ -69,8 +69,6 @@ class State {
 
         const s = Math.sqrt(lambda.real)
 
-        // console.log(lambda)
-
         // now take the vector of this substate, and for each pair of pure states where all qbits are the same except for the one being separated, add together their values weighted by the amplitude of the separated qbit being the value it is in that state (what's stored in the eigenvector), that will be what's left after the separation. finally, dividing by s normalizes it
 
         const newVector = {

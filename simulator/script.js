@@ -68,9 +68,6 @@ async function main() {
     await state.apply(CRY, [1], [3], [pi/3], [])
 
     console.log(await state.displayFullState())
-
-    debugger
-
 }
 main()
 
