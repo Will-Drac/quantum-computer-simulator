@@ -1,0 +1,17 @@
+body { 
+    background-color: rgb(25, 25, 25);
+    color: white;
+    margin: 2vw;
+}
+
+#qasmInput {
+    width: 500px;
+    height: 500px;
+}
+
+textarea {
+    background-color: rgb(6, 6, 6);
+    color: white;
+    font-family: 'Cascadia Code', 'Fira Code',  monospace;
+    font-size: large;
+}

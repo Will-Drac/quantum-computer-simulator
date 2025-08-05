@@ -22,7 +22,6 @@ class Substate {
     }
 
     async swap(qbitSwaps) { //qbitSwaps will hold a list of all swaps the make in order eg. [[0, 1], [0, 2]] 012 -> 201
-        console.log(qbitSwaps)
         if (qbitSwaps.length == 0) { return }
 
         const size = this.vector.real.size

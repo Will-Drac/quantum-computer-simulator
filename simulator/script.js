@@ -43,7 +43,7 @@ async function main() {
     // !max column that can be stored is 2^30, so max 30 qbits
     console.log(`${Math.floor(Math.log2(maxStorageBufferBindingSize / 4))} entangled qbits are possible on this device`)
 
-
+    /*
     const numQbits = 4
 
     let state = new State(numQbits)
@@ -68,6 +68,7 @@ async function main() {
     await state.apply(CRY, [1], [3], [pi/3], [])
 
     console.log(await state.displayFullState())
+    */
 }
 main()
 

@@ -1,9 +1,17 @@
 class State {
     constructor(numQbits) {
         this.substates = []
+        this.numQbits = numQbits
 
         for (let i = 0; i < numQbits; i++) {
             this.substates.push(new Substate(1, [i]))
+        }
+    }
+
+    addQbits(numQbits) {
+        for (let i = 0; i < numQbits; i++) {
+            this.substates.push(new Substate(1, [this.numQbits]))
+            this.numQbits++
         }
     }
 
@@ -57,6 +65,8 @@ class State {
     async separate(qbit) {
         const q = this.getQbitFromSubstate(qbit)
         const S = q.substate
+
+        if (S.numQbits == 1) {return S} // if it's already the only qbit in its substate don't do anything
 
         // first, we get the reduced density matrix of just the qbit to separate out of the state
         const rho = await S.getQbitReducedDensityMatrix(q.localQbitIndex)

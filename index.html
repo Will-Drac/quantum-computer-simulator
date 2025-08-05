@@ -5,6 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
+
+    <link rel="stylesheet" href="./style.css">
+
     <script src="./simulator/runComputeShader.js"></script>
     <script src="./simulator/getEigenvaluesEigenvectors.js"></script>
     <script src="./simulator/GateMatrix.js"></script>
@@ -16,10 +19,24 @@
     <script src="./simulator/Substate.js"></script>
     <script src="./simulator/State.js"></script>
     <script src="./simulator/script.js"></script>
+
+    <script src="./interpreter/readFile.js"></script>
 </head>
 
 <body>
+    <button onclick="parseQasm(document.getElementById('qasmInput').value)">Run</button>
+    <br><br>
+    <textarea name="qasmInput" id="qasmInput"></textarea>
+    <script>
+        const textArea = document.getElementById("qasmInput")
+        textArea.value = localStorage.getItem("qasmInput")
 
+        textArea.addEventListener("input", function () {
+            const text = textArea.value
+
+            localStorage.setItem("qasmInput", text)
+        })
+    </script>
 </body>
 
 </html>
