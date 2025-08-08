@@ -162,6 +162,46 @@ class Substate {
 
     // gets the reduced density matrix of the selected qbit out of the overall state, used to get bloch sphere position and to remove this qbit from the state
     async getQbitReducedDensityMatrix(qbit) {
+        // if there's only one qbit in this substate, getting the density matrix is very efficient on the cpu
+        if (this.numQbits == 1) {
+            const readBufferReal = device.createBuffer({
+                size: this.vector.real.size,
+                usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+            })
+            const readBufferImag = device.createBuffer({
+                size: this.vector.imag.size,
+                usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+            })
+
+            const readEncoder = device.createCommandEncoder()
+            readEncoder.copyBufferToBuffer(
+                this.vector.real, 0, readBufferReal, 0, readBufferReal.size
+            )
+            readEncoder.copyBufferToBuffer(
+                this.vector.imag, 0, readBufferImag, 0, readBufferImag.size
+            )
+
+            device.queue.submit([readEncoder.finish()])
+
+            await readBufferReal.mapAsync(GPUMapMode.READ)
+            const vectorReal = new Float32Array(readBufferReal.getMappedRange())
+
+            await readBufferImag.mapAsync(GPUMapMode.READ)
+            const vectorImag = new Float32Array(readBufferImag.getMappedRange())
+
+            return {
+                real: [
+                    [vectorReal[0] ** 2 + vectorImag[0] ** 2, vectorReal[0] * vectorReal[1] + vectorImag[0] * vectorImag[1]],
+                    [vectorReal[0] * vectorReal[1] + vectorImag[0] * vectorImag[1], vectorReal[1] ** 2 + vectorImag[1] ** 2]
+                ],
+
+                imag: [
+                    [0, vectorReal[1] * vectorImag[0] - vectorImag[1] * vectorReal[0]],
+                    [vectorImag[1] * vectorReal[0] - vectorReal[1] * vectorImag[0], 0]
+                ]
+            }
+        }
+
         const prob0 = await this.getQbitProbability0(qbit)
 
         // now, we need to get the coherence between |0> and |1>
