@@ -86,10 +86,10 @@ class GPhase {
 
         for (let i = 0; i < modifiers.length; i++) {
             if (modifiers[i].type == "control") {
-                this.gateMatrix = await this.addControlGateMatrix("pos", this.gateMatrix.entries[0])
+                this.gateMatrix.entries[0] = await this.addControlGateMatrix("pos", this.gateMatrix.entries[0])
             }
             else if (modifiers[i].type == "negativeControl") {
-                this.gateMatrix = await this.addControlGateMatrix("neg", this.gateMatrix.entries[0])
+                this.gateMatrix.entries[0] = await this.addControlGateMatrix("neg", this.gateMatrix.entries[0])
             }
         }
     }

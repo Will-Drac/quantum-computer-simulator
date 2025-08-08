@@ -66,7 +66,7 @@ class State {
         const q = this.getQbitFromSubstate(qbit)
         const S = q.substate
 
-        if (S.numQbits == 1) {return S} // if it's already the only qbit in its substate don't do anything
+        if (S.numQbits == 1) { return S } // if it's already the only qbit in its substate don't do anything
 
         // first, we get the reduced density matrix of just the qbit to separate out of the state
         const rho = await S.getQbitReducedDensityMatrix(q.localQbitIndex)
@@ -176,22 +176,55 @@ class State {
 
     async apply(gateUnitaryOrGPhase, controlQbits, qbitsApplied, inputs, modifiers) {
         const G = gateUnitaryOrGPhase
-        if (G.constructor.name == "Gate") {
+        const gateType = G.constructor.name
+
+        if (gateType == "Gate") {
             await G.applyComponents(this, controlQbits, qbitsApplied, inputs, modifiers)
         }
         else { //it will be a Unitary or GPhase
+            //* in the substates system, applying gphase can be done by multiplying just one of the substates by e^(iθ).     e^(iθ)ψ1 * ψ2 * ψ3 = e^(iθ) (ψ1 * ψ2 * ψ3)       applying the phase to just one substate is the same as applying it to the entire global state
+
+            // if there are no controls to dictate the substate to apply to, just choose the smallest substate
+            if (gateType == "GPhase" && controlQbits.length == 0) {
+                let smallestSubstateSize = Infinity
+                let smallestSubstateIndex = -1
+                for (let i = 0; i < this.substates.length; i++) {
+                    if (this.substates[i].numQbits < smallestSubstateSize) {
+                        smallestSubstateSize = this.substates[i].numQbits
+                        smallestSubstateIndex = i
+                    }
+                }
+
+                qbitsApplied = this.substates[smallestSubstateIndex].qbitOrder
+            }
+
             // first, we need to combine all the substates which hold the affected qbits into one
             const qbitsAffected = controlQbits.concat(qbitsApplied)
-            const substateApplying = await this.combine(qbitsAffected)
+            let substateApplying = await this.combine(qbitsAffected)
 
-            const qbitApplied = qbitsApplied[0] //if this is a unitary, there will be one qbit applied. if a GPhase, there will be none and this will be undefined
+            // for gphase, there needs to be at least one qbit to apply the phase to which is not a control. we might need to combine substates for that
+            if (gateType == "GPhase" && substateApplying.numQbits == controlQbits.length) {
+
+                let smallestSubstateSize = Infinity
+                let smallestSubstateIndex = -1
+                for (let i = 0; i < this.substates.length; i++) {
+                    if (this.substates[i].numQbits < smallestSubstateSize && !this.substates[i].qbitOrder.includes(controlQbits[0])) { //if this substate includes any of the control qbits, it's already in this substate so we cant use it
+                        smallestSubstateSize = this.substates[i].numQbits
+                        smallestSubstateIndex = i
+                    }
+                }
+
+                substateApplying = await this.combine(
+                    qbitsAffected.concat(this.substates[smallestSubstateIndex].qbitOrder)
+                )
+            }
 
             // then the qbits in the substate need to be swapped around so that all the controls are first (starting with most recently applied), then the applied qbit (if it's a Unitary), then no qbits affected for the rest of the substate
             let qbitsCurrentLocations = [] //stores where the affected qbits are currently. the array is ordered so that the controls are first, in order of most recently applied first, then the applied qbit at the end of the array if it exists
             for (let i = controlQbits.length - 1; i >= 0; i--) { //indexing is reversed so that the most recently applied control is first
                 qbitsCurrentLocations.push(substateApplying.qbitOrder.indexOf(controlQbits[i]))
             }
-            if (G.constructor.name == "Unitary") { qbitsCurrentLocations.push(substateApplying.qbitOrder.indexOf(qbitApplied)) }
+            if (gateType == "Unitary") { qbitsCurrentLocations.push(substateApplying.qbitOrder.indexOf(qbitsApplied[0])) }
 
             // we want to do swaps of qbit indices in the substate so that the new currentPosition of each affected qbit is equal to its index in the currentPositions array, then it will be in the correct order for a GateMatrix to be applied
             let swaps = []
