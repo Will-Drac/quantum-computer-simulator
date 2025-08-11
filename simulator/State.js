@@ -314,11 +314,12 @@ class State {
         }
     }
 
-    async measure(qbit) {
+    // result should either be 0, 1, or Math.random (or equivalent)
+    async measure(qbit, result) {
         const q = this.getQbitFromSubstate(qbit)
         const S = q.substate
 
-        const measurementResult = await S.measure(q.localQbitIndex)
+        const measurementResult = await S.measure(q.localQbitIndex, result)
 
         // now that this qbit has been measured, its entanglement has surely collapsed, and it can be separated from the rest of the substate
         await this.separate(qbit)

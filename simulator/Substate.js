@@ -133,9 +133,9 @@ class Substate {
     }
 
     // measures a qbit to 0 or 1 and collapses part of the state
-    async measure(qbit) {
+    async measure(qbit, result) {
         const probabilityToMeasure0 = await this.getQbitProbability0(qbit)
-        const measurementResult = Math.random() < probabilityToMeasure0 ? 0 : 1
+        const measurementResult = result < probabilityToMeasure0 ? 0 : 1
 
         // now to collapse
         const numRows = 2 ** this.numQbits
