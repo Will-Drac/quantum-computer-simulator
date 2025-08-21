@@ -35,7 +35,19 @@ class Gate {
             else if (type == "control" || type == "negativeControl") { passedDownControls.push(modifiers[i]) }
         }
 
-        if (totalPower !== Math.floor(totalPower)) { console.log("ERROR: tried applying a float-valued power to a gate: " + totalPower, this) }
+        if (totalPower !== Math.floor(totalPower)) {
+            // if this gate has only one or zero unitaries, we can still apply float powers
+            let numUnitaries = 0
+            const c = this.components
+            for (let i = 0; i < c.length; i++) {
+                // if this gate contains another which has more than one unitary, it will be missed for now, but that gate itself will catch it
+                numUnitaries += c[i].effect.constructor.type == "Unitary" ? 1 : 0
+            }
+
+            if (numUnitaries > 1) {
+                console.log("ERROR: tried applying a float-valued power to a gate with more than one unitary: " + totalPower, this)
+            }
+        }
 
         // these qbit indices get passed to all components, since the controls on this Gate are applied to its components as modifiers
         let passedDownQbits = []
