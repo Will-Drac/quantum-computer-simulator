@@ -24,7 +24,8 @@ class Gate {
 
     async applyComponents(state, controlQbits, qbitsApplied, inputs, modifiers) {
         // about modifiers:
-        // remove all power and inverse modifiers and apply this gate multiple times or flip is components accordingly
+        // if there is only 1 or 0 unitaries, we can still apply float powers to this gate by collecting the powers and applying them to all components
+        // else, remove all power and inverse modifiers and apply this gate multiple times or flip is components accordingly
         // pool together all controls and pass them down to the components as modifiers
         let totalPower = 1
         let passedDownControls = []
@@ -35,19 +36,29 @@ class Gate {
             else if (type == "control" || type == "negativeControl") { passedDownControls.push(modifiers[i]) }
         }
 
-        if (totalPower !== Math.floor(totalPower)) {
-            // if this gate has only one or zero unitaries, we can still apply float powers
-            let numUnitaries = 0
-            const c = this.components
-            for (let i = 0; i < c.length; i++) {
-                // if this gate contains another which has more than one unitary, it will be missed for now, but that gate itself will catch it
-                numUnitaries += c[i].effect.constructor.type == "Unitary" ? 1 : 0
-            }
 
-            if (numUnitaries > 1) {
+        let passedDownPower = undefined
+
+        // if this gate has only one or zero unitaries, we can still apply float powers
+        let numUnitaries = 0
+        const c = this.components
+        for (let i = 0; i < c.length; i++) {
+            // if this gate contains another which has more than one unitary, it will be missed for now, but that gate itself will catch it
+            numUnitaries += c[i].effect.constructor.type == "Unitary" ? 1 : 0
+        }
+
+        if (numUnitaries > 1) {
+            if (totalPower !== Math.floor(totalPower)) {
+                // if it's a float power, log an error
                 console.log("ERROR: tried applying a float-valued power to a gate with more than one unitary: " + totalPower, this)
             }
         }
+        else { //we can actually apply the float power, by passing down the power modifier
+            passedDownPower = new Modifier("power", totalPower)
+            totalPower = 1
+        }
+        // so it will only apply the int power through repetition if there are more than 1 unitaries
+
 
         // these qbit indices get passed to all components, since the controls on this Gate are applied to its components as modifiers
         let passedDownQbits = []
@@ -61,7 +72,8 @@ class Gate {
             applyingInverse = true
         }
 
-        // we repeat application of all components according to the power this gate was raised to
+
+        // we repeat application of all components according to the power this gate was raised to (if it's an int power)
         for (let repetition = 0; repetition < totalPower; repetition++) {
 
             let currentControlsIndex = 0
@@ -82,6 +94,7 @@ class Gate {
                     cModifiers.push(passedDownControls[l])
                 }
                 if (applyingInverse) { cModifiers.push(new Modifier("inverse")) }
+                if (passedDownPower) {cModifiers.push(passedDownPower)}
 
 
                 // getting all the inputs to this component and then applying it to the state
@@ -111,5 +124,3 @@ class Gate {
         }
     }
 }
-
-// i think we just dont allow float-powers of a composite matrix
