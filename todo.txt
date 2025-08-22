@@ -1,0 +1,36 @@
+if a gate has only one non-phase component, float-powers should be possible
+
+gates on the bottom left
+    when you hover them, it shows a preview of what the gate will do on the bloch sphere:
+        for single qbit gates:
+            shows a bunch of vectors on the bloch sphere and animates their rotation to where they will be after the gate
+            if the gate has inputs, first it animates to the position with the inputs at 0, then it animates the actual inputs
+            all along, it shows the input values and the power of the matrix being displayed at this time
+            the animation will be showing the bloch sphere with gate X^t t from [0, 1]
+                we can store a lot of what's needed to calculate the power for performance
+
+        for multiple qbit gates:
+            for each pure state which might be the input, it shows the output
+            no animation, too hard
+            essentially just shows what can be seen by looking at the matrix
+
+circuit builder at the top left
+    you can give it as many qbits as you want
+        qbits can be grouped together and collapsed?
+
+    same hover gate thing as above
+
+    updates on every edit
+
+    editable seed
+    OR, you can manually choose the outcome of the measurement/reset for debugging purposes
+
+    inspect mode
+        runs through the layers of gates step by step
+        animates the bloch spheres on each line of the circuit for each layer so you can see how the qbits move throughout
+            maybe just lazy animation where the vector moves linearly from initial to final
+
+state vector on the top right
+    for each basis state:
+        probability as a bar graph
+        phase and amplitude as a phasor

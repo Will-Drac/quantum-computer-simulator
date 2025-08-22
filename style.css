@@ -1,17 +1,126 @@
-body { 
+body {
     background-color: rgb(25, 25, 25);
     color: white;
-    margin: 2vw;
+    margin: 0px;
+    display: flex;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-#qasmInput {
-    width: 500px;
-    height: 500px;
+.border {
+    border: 2px solid #ccc;
+    box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
 }
 
-textarea {
-    background-color: rgb(6, 6, 6);
-    color: white;
-    font-family: 'Cascadia Code', 'Fira Code',  monospace;
-    font-size: large;
+#circuitArea {
+    width: 80vw;
+    height: 70vh;
+    overflow-x: auto;
+    overflow-y: auto;
+    white-space: nowrap;
+    display: flex;
+}
+
+#stateArea {
+    height: 100vh;
+    width: 20vw;
+}
+
+#gatesArea {
+    width: 80vw;
+    height: 30vh;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-content: center;
+    flex-wrap: wrap;
+
+    overflow-x: auto;
+    overflow-y: auto;
+}
+
+#circuitQbits {
+    background-color: rgb(25, 25, 25);
+
+    position: sticky;
+    right: 0px;
+
+    width: 75px;
+    height: 100%;
+}
+
+.qbitTrack {
+    position: relative;
+
+    width: 100vw;
+    height: 75px;
+    
+    display: flex;
+    align-items: center;
+   
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+
+    border-left: 0px;
+    border-right: 0px;
+}
+
+.qbitInfo {
+    height: 75px;
+    width: 75px;
+
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+
+    display: flex;
+    align-items: center;
+    justify-content: center
+}
+
+.qbitLine {
+    border: 1px dashed #ccc;
+    width: 100%;
+    height: 0px;
+}
+
+.gate {
+    width: 65px;
+    height: 65px;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    background-color: rgb(255, 30, 30);
+    border-radius: 10px;
+    border: 3px solid black;
+    box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+
+    margin: 10px;
+
+    user-select: none;
+    cursor: grab;
+}
+
+.gate.dragging {
+    opacity: 0.5;
+}
+
+canvas {
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    background-color: rgb(15, 15, 15);
+}
+
+.blochDisplay {
+    width: 50px;
+    height: 50px;
 }

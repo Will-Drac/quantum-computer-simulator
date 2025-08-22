@@ -43,15 +43,14 @@ async function main() {
     // !max column that can be stored is 2^30, so max 30 qbits
     console.log(`${Math.floor(Math.log2(maxStorageBufferBindingSize / 4))} entangled qbits are possible on this device`)
 
-    /*
     const numQbits = 4
 
     let state = new State(numQbits)
 
     const X = new Unitary(pi, 0, pi)
-    const H = new Unitary(pi / 2, 0, pi)
+    // const H = new Unitary(pi / 2, 0, pi)
     const RY = new Unitary([0, function (v) { return v }], 0, 0)
-    const RZ = new Unitary(0, [0, function(v){return v}], 0)
+    const RZ = new Unitary(0, [0, function (v) { return v }], 0)
 
     const CX = new Gate([new GateComponent(X, [new Modifier("control")])])
     const CRY = new Gate([new GateComponent(RY, [new Modifier("control")])])
@@ -61,14 +60,29 @@ async function main() {
 
     const CPHASE = new Gate([new GateComponent(PHASE, [new Modifier("negativeControl")])])
 
-    await state.apply(RY, [], [0], [pi/4], [])
-    await state.apply(CX, [0], [2], [], [])
-    await state.apply(H, [], [0], [], [])
-    await state.apply(RY, [], [1], [pi/5], [])
-    await state.apply(CRY, [1], [3], [pi/3], [])
+    const H = new Gate([new GateComponent(new Unitary(pi/2, 0, pi), []), new GateComponent(new GPhase(-pi/2), [])])
 
-    console.log(await state.displayFullState())
+    await state.apply(H, [], [0], [], [new Modifier("power", 5)])
+
+    // console.log(await state.measure(0, Math.random()))
+    console.log(await state.getQbitInfo(0))
+
+    /*
+    // const g = new Unitary(2*pi*Math.random(), 2*pi*Math.random(), 2*pi*Math.random())
+    const g = H
+
+    let t = 0
+    setInterval(async function () {
+        const s = new State(1)
+        await s.apply(g, [], [0], [], [new Modifier("power", t/1000)])
+        const blochPos = (await s.getQbitInfo(0)).position
+
+        // drawBloch(document.getElementById("testCanvas"), blochPos, t / 3000, 0.75 * sin(t / 3000))
+        drawBloch(document.getElementById("testCanvas"), blochPos, -pi/6, pi/4)
+        t += 16
+    }, 16)
     */
+
 }
 main()
 

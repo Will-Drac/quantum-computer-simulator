@@ -8,6 +8,54 @@
 
     <link rel="stylesheet" href="./style.css">
 
+
+</head>
+
+<body>
+    <div>
+        <div id="circuitArea" class="border">
+            <div id="circuitTracks"></div>
+            <div id="circuitQbits"></div>
+        </div>
+
+        <div id="gatesArea" class="border">
+            <div class="gate" draggable="true" id="gateP(λ)">P(λ)</div>
+
+            <div class="gate" draggable="true" id="gateH">H</div>
+
+            <div class="gate" draggable="true" id="gateX">X</div>
+            <div class="gate" draggable="true" id="gate√X">√X</div>
+            <div class="gate" draggable="true" id="gateY">Y</div>
+            <div class="gate" draggable="true" id="gateZ">Z</div>
+
+            <div class="gate" draggable="true" id="gateS">S</div>
+            <div class="gate" draggable="true" id="gateS†">S†</div>
+            <div class="gate" draggable="true" id="gateT">T</div>
+            <div class="gate" draggable="true" id="gateT†">T†</div>
+
+            <div class="gate" draggable="true" id="gateRX(θ)">RX(θ)</div>
+            <div class="gate" draggable="true" id="gateRY(θ)">RY(θ)</div>
+            <div class="gate" draggable="true" id="gateRZ(θ)">RZ(θ)</div>
+
+            <div class="gate" draggable="true" id="gateCX">CX</div>
+            <div class="gate" draggable="true" id="gateCY">CY</div>
+            <div class="gate" draggable="true" id="gateCZ">CZ</div>
+
+            <div class="gate" draggable="true" id="gateCP(λ)">CP(λ)</div>
+
+            <div class="gate" draggable="true" id="gateCH">CH</div>
+
+            <div class="gate" draggable="true" id="gateCX(θ)">CX(θ)</div>
+            <div class="gate" draggable="true" id="gateCY(θ)">CY(θ)</div>
+            <div class="gate" draggable="true" id="gateCZ(θ)">CZ(θ)</div>
+        </div>
+    </div>
+
+    <div id="stateArea" class="border"></div>
+
+    <!-- <canvas class="blochDisplay" id="testCanvas" width="75" height="75"></canvas> -->
+
+
     <script src="./simulator/runComputeShader.js"></script>
     <script src="./simulator/getEigenvaluesEigenvectors.js"></script>
     <script src="./simulator/GateMatrix.js"></script>
@@ -20,23 +68,9 @@
     <script src="./simulator/State.js"></script>
     <script src="./simulator/script.js"></script>
 
-    <script src="./interpreter/readFile.js"></script>
-</head>
-
-<body>
-    <button onclick="parseQasm(document.getElementById('qasmInput').value)">Run</button>
-    <br><br>
-    <textarea name="qasmInput" id="qasmInput"></textarea>
-    <script>
-        const textArea = document.getElementById("qasmInput")
-        textArea.value = localStorage.getItem("qasmInput")
-
-        textArea.addEventListener("input", function () {
-            const text = textArea.value
-
-            localStorage.setItem("qasmInput", text)
-        })
-    </script>
+    <script src="./ui/interaction.js"></script>
+    <script src="./ui/visualizer.js"></script>
+    <script src="./ui/simulation.js"></script>
 </body>
 
 </html>
