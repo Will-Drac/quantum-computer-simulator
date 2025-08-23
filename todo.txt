@@ -1,5 +1,3 @@
-if a gate has only one non-phase component, float-powers should be possible
-
 gates on the bottom left
     when you hover them, it shows a preview of what the gate will do on the bloch sphere:
         for single qbit gates:
