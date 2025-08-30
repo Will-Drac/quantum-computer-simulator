@@ -1,19 +1,167 @@
-const X = new Unitary(pi, 0, pi)
-const H = new Unitary(pi / 2, 0, pi)
-const RY = new Unitary([0, function (v) { return v }], 0, 0)
-const RZ = new Unitary(0, [0, function (v) { return v }], 0)
+let tracks = {}
 
-const CX = new Gate([new GateComponent(X, [new Modifier("control")])])
-const CRY = new Gate([new GateComponent(RY, [new Modifier("control")])])
-const CRY4 = new Gate([new GateComponent(CRY, [new Modifier("power", 4)])])
 
-const PHASE = new GPhase([0, function (phase) { return phase }])
+let gates = {}
+gates["GP(θ)"] = {
+    Gate: new GPhase([0, function (phase) { return phase }]),
+    inputs: ["λ"],
+    qbits: [],
+    appliedQbits: [],
+    controlQbits: [],
+}
 
-const CPHASE = new Gate([new GateComponent(PHASE, [new Modifier("negativeControl")])])
+gates["U(θ,φ,λ)"] = {
+    Gate: new Unitary([0, function (theta) { return theta }], [1, function (phi) { return phi }], [2, function (lambda) { return lambda }]),
+    inputs: ["θ", "φ", "λ"],
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
 
-let gates = {
-    gphase: { Gate: new GPhase([0, function (phase) { return phase }]), inputs: ["λ"], qbits: 0 },
-    u: { Gate: new Unitary([0, function (theta) { return theta }], [1, function (phi) { return phi }], [2, function (lambda) { return lambda }]), inputs: ["θ", "φ", "λ"], qbits: 1 }
+gates["P(λ)"] = {
+    Gate: new Gate([
+        new GateComponent(new GPhase([0, function (lambda) { return lambda }]), [new Modifier("control")])
+    ]),
+    inputs: ["λ"],
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["X"] = {
+    Gate: new Gate([
+        new GateComponent(new Unitary(pi, 0, pi), []),
+        new GateComponent(new GPhase(-pi / 2), [])
+    ]),
+    inputs: [],
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["Y"] = {
+    Gate: new Gate([
+        new GateComponent(new Unitary(pi, pi / 2, pi / 2), []),
+        new GateComponent(new GPhase(-pi / 2), [])
+    ]),
+    inputs: [],
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["Z"] = {
+    Gate: gates["P(λ)"].Gate,
+    inputs: [pi],
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["H"] = {
+    Gate: new Gate([
+        new GateComponent(new Unitary(pi / 2, 0, pi), []),
+        new GateComponent(new GPhase(-pi / 4), [])
+    ]),
+    inputs: [],
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["S"] = {
+    Gate: new Gate([
+        new GateComponent(gates["Z"].Gate, [new Modifier("power", 0.5)])
+    ]),
+    inputs: [],
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["S†"] = {
+    Gate: new Gate([
+        new GateComponent(gates["Z"].Gate, [new Modifier("power", -0.5)])
+    ]),
+    inputs: [],
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["T"] = {
+    Gate: new Gate([
+        new GateComponent(gates["Z"].Gate, [new Modifier("power", 0.25)])
+    ]),
+    inputs: [],
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["T†"] = {
+    Gate: new Gate([
+        new GateComponent(gates["Z"].Gate, [new Modifier("power", -0.25)])
+    ]),
+    inputs: [],
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["√X"] = {
+    Gate: new Gate([
+        new GateComponent(gates["X"].Gate, [new Modifier("power", 0.5)])
+    ]),
+    inputs: [],
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["RX(θ)"] = {
+    Gate: new Gate([
+        new GateComponent(new Unitary([0, function (theta) { return theta }], -pi / 2, pi / 2), []),
+        new GateComponent(new GPhase([0, function (theta) { return -theta / 2 }]), [])
+    ]),
+    inputs: ["θ", "θ"], //the same twice because the same input goes to both components
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["RY(θ)"] = {
+    Gate: new Gate([
+        new GateComponent(new Unitary([0, function (theta) { return theta }], 0, 0), []),
+        new GateComponent(new GPhase([0, function (theta) { return -theta / 2 }]), [])
+    ]),
+    inputs: ["θ", "θ"], //the same twice because the same input goes to both components
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["RZ(λ)"] = {
+    Gate: new Gate([
+        new GateComponent(new GPhase([0, function (lambda) { return -lambda / 2 }]), []),
+        new GateComponent(new Unitary(0, 0, [0, function (lambda) { return lambda }]), [])
+    ]),
+    inputs: ["λ", "λ"], //the same twice because the same input goes to both components
+    qbits: ["a"],
+    appliedQbits: ["a"],
+    controlQbits: [],
+}
+
+gates["SWAP"] = {
+    Gate: new Gate([
+        new GateComponent(gates["X"], new Modifier("control")),
+        new GateComponent(gates["X"], new Modifier("control")),
+        new GateComponent(gates["X"], new Modifier("control"))
+    ]),
+    inputs: [],
+    qbits: ["a", "b"],
+    appliedQbits: ["b", "a", "b"],
+    controlQbits: ["a", "b", "a"],
 }
 
 /*
