@@ -4,12 +4,20 @@ function createQbit(position) {
 
     // go through the current tracks and shift their position to make room
     const allTracks = tracksDiv.children
+    let newTracks = {}
     for (i = 0; i < allTracks.length; i++) {
-        const a = allTracks[i].getAttribute("qindex")
+
+        const a = parseInt(allTracks[i].getAttribute("qindex"))
+
         if (a && a >= position) {
-            allTracks[i].setAttribute("qindex", parseInt(a) + 1)
+            allTracks[i].setAttribute("qindex", a + 1)
+            newTracks[String(a + 1)] = tracks[a]
+        }
+        else {
+            newTracks[a] = tracks[a]
         }
     }
+    tracks = newTracks
 
     const div = document.createElement("div")
     div.setAttribute("qindex", position)
@@ -30,6 +38,8 @@ function createQbit(position) {
             trackBackground.appendChild(draggedGate)
 
             setupGateInteraction(draggedGate)
+
+            addGateToTrack(e.target, draggedGate)
 
             draggedGate = null
         }
@@ -64,12 +74,21 @@ function removeQbit(position) {
 
     // decrease the index of all after
     const allTracks = tracksDiv.children
+    let newTracks = {}
     for (i = 0; i < allTracks.length; i++) {
-        const a = allTracks[i].getAttribute("qindex")
+
+        const a = parseInt(allTracks[i].getAttribute("qindex"))
+
         if (a && a > position) {
-            allTracks[i].setAttribute("qindex", parseInt(a) - 1)
+            allTracks[i].setAttribute("qindex", a - 1)
+            newTracks[a - 1] = tracks[a]
+        }
+        else {
+            newTracks[a] = tracks[a]
         }
     }
+    delete newTracks[allTracks.length - 1]
+    tracks = newTracks
 
     tracksDiv.childNodes[position].remove()
 
@@ -93,7 +112,7 @@ function createTrackEditBox(position, barClicked) {
 
     document.getElementById("circuitArea").append(div)
 
-    if (trackDiv.parentElement.childNodes.length !== 1){
+    if (trackDiv.parentElement.childNodes.length !== 1) {
         const remove = document.createElement("p")
         remove.innerText = "↑Remove Track Above"
         remove.addEventListener("click", e => {
@@ -146,7 +165,7 @@ function setupGateInteraction(g) {
     })
 
     g.addEventListener("dragend", e => {
-        document.querySelectorAll(".moved").forEach(r => { r.remove() })
+        document.querySelectorAll(".moved").forEach(r => { removeGateFromTrack(r) })
     })
 
     g.addEventListener("click", e => {
@@ -158,10 +177,65 @@ function setupGateInteraction(g) {
 
 document.querySelectorAll(".gate").forEach(g => { setupGateInteraction(g) })
 
+function addGateToTrack(track, gate) {
+    const trackNumber = parseInt(track.parentElement.parentElement.getAttribute("qIndex"))
+
+    // gets an array of all unique inputs to this gate which must be defined
+    const g = gates[gate.innerText]
+    let uniqueInputs = []
+    for (let i = 0; i < g.inputs.length; i++) {
+        const input = g.inputs[i]
+        if (typeof (input) == "string" && !uniqueInputs.includes(input)) {
+            uniqueInputs.push(input)
+        }
+    }
+
+    const inputsObject = {}
+    for (let i = 0; i < uniqueInputs.length; i++) {
+        inputsObject[uniqueInputs[i]] = 0
+    }
+
+    const qbitsObject = {}
+    qbitsObject[g.qbits[0]] = trackNumber
+    for (let i = 1; i < g.qbits.length; i++) {
+        qbitsObject[g.qbits[i]] = undefined //qbits missing for inputs: this should alert the user
+    }
+
+    if (!tracks[String(trackNumber)]) { tracks[String(trackNumber)] = {} }
+    tracks[String(trackNumber)][String(parseInt(gate.style.left) / 75)] = {
+        gate: g,
+        inputs: inputsObject,
+        qbits: qbitsObject
+    }
+}
+
+function removeGateFromTrack(gate) {
+    const trackIndex = parseInt(gate.parentElement.parentElement.parentElement.getAttribute("qindex"))
+
+    // if the gate is even placed down at all
+    if (gate.style.left) {
+        const posOnTrack = parseInt(gate.style.left) / 75
+        delete tracks[trackIndex][posOnTrack]
+    }
+
+    gate.remove()
+}
+
 /*
 TODO
 
-clicking on a gate asks for its inputs, automatically fills input also
+each track has an array of the gates on it
+    when you drop a gate, it puts itself into that array in the correct order
+    includes:
+        name (for lookup in gates object)
+        inputs and their values (including qbits)
+        modifiers
+    the html object keeps a variable for its position in the array (left value/75)
+    gate parameters autofill
+    controls/additional qbits create a prompt that the gate is not yet properly defined after first placement
+    if its a gate with more than one qbit, it creates a gate ui element (or something indicating a control) on the other tracks with reference to whichever the first applied qbit is
+
+clicking on a gate asks for its inputs
 
 add u and gphase gates to ui
     what to do about gphase...
